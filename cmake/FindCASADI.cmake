@@ -9,6 +9,7 @@ if(CASADI_INCLUDE_DIR)
   message(STATUS "Found CasADi include dir: ${CASADI_INCLUDE_DIR}")
 else()
   message(STATUS "Could not find CasADi include dir: LOX ")
+  message(“LOX PIDOR”)
 endif()
 
 set(CASADI_LIBS_LIST
