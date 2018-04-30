@@ -1,5 +1,5 @@
 #include "ros/ros.h"
-#include "test_package/aircraft_controls.h"
+#include "openkite/aircraft_controls.h"
 #include "boost/date_time/posix_time/posix_time.hpp"
 #include "boost/thread.hpp"
 #include <random>
@@ -11,8 +11,8 @@ int main(int argc, char** argv)
     ros::NodeHandle handle;
     ros::Rate loop_rate(30);
 
-    ros::Publisher pub = handle.advertise<test_package::aircraft_controls>("/controls", 100);
-    test_package::aircraft_controls msg;
+    ros::Publisher pub = handle.advertise<openkite::aircraft_controls>("/controls", 100);
+    openkite::aircraft_controls msg;
     msg.ailerons = 0;
     msg.flaps    = 0;
     msg.rudder   = 1;
