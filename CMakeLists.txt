@@ -137,7 +137,7 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 
-include_directories(src/kite_model src/nodes src/kite_control src/kite_estimation src/kite_math
+include_directories(src/kite_model src/nodes src/kite_control src/kite_estimation src/kite_math src/bifoiler
                     ${catkin_INCLUDE_DIRS} ${VRPN_INCLUDE_DIR} ${CASADI_INCLUDE_DIR} ${YAML_CPP_INCLUDE_DIR})
 
 ## Declare a C++ library
@@ -150,7 +150,6 @@ include_directories(src/kite_model src/nodes src/kite_control src/kite_estimatio
 
 ## Declare a C++ executable
 add_executable(casadi_test src/casadi_test.cpp)
-#add_executable(lidar_driver src/lidar_driver.cpp)
 
 ## Add cmake target dependencies of the executable
 ## same as for the library above
@@ -158,13 +157,13 @@ add_executable(casadi_test src/casadi_test.cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(casadi_test ${CASADI_LIBRARIES} ${YAML_CPP_LIBS} ${catkin_LIBRARIES})
-#target_link_libraries(lidar_driver ${catkin_LIBRARIES})
 
 add_subdirectory(src/kite_model)
 add_subdirectory(src/kite_control)
 add_subdirectory(src/kite_estimation)
 add_subdirectory(src/kite_math)
 add_subdirectory(src/nodes)
+add_subdirectory(src/bifoiler)
 
 #############
 ## Install ##
