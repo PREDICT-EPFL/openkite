@@ -37,6 +37,7 @@ private:
     casadi::DM      state;
 
     void controlCallback(const openkite::aircraft_controls::ConstPtr &msg);
+    void simple_controlCallback(const openkite::aircraft_controls::ConstPtr &msg);
     double sim_rate;
     sensor_msgs::MultiDOFJointState msg_state;
 

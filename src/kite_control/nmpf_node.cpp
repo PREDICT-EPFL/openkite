@@ -9,70 +9,58 @@ void KiteNMPF_Node::filterCallback(const sensor_msgs::MultiDOFJointState::ConstP
     //boost::unique_lock<boost::mutex> scoped_lock(m_mutex, boost::try_to_lock);
     DM estimation = convertToDM(*msg);
     /** prevent outliers*/
-    std::vector<double> estim = estimation.nonzeros();
-    if((std::fabs(estim[3]) >= 4) || (std::fabs(estim[4]) >= 7) || (std::fabs(estim[5]) >= 4))
-    {
-    }
-    else
-    {
-        kite_state = estimation;
-    }
+    kite_state = estimation(Slice(3,6));
     if(!is_initialized())
         initialize();
 }
 
-KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh, const KiteProperties &kite_props,
+KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh, const SimpleKinematicKiteProperties &kite_props,
                                                          const AlgorithmProperties &algo_props )
 {
-    std::shared_ptr<KiteDynamics> kite = std::make_shared<KiteDynamics>(kite_props, algo_props);
-
+    std::shared_ptr<SimpleKinematicKite> kite = std::make_shared<SimpleKinematicKite>(algo_props, kite_props);
     /** @badcode : parametrize path outside NMPF node  constructor*/
     SX x = SX::sym("x");
-    double radius   = 2.72;
-    double altitude = 0.00;
-    SX Path = SX::vertcat(SXVector{radius * cos(x), radius * sin(x), altitude});
-    /** rotate path */
-    SX q_rot = SX::vertcat({cos(0 / 24), 0, sin(0 / 24), 0});
-    SX q_rot_inv = kmath::quat_inverse(q_rot);
-    SX qP_tmp = kmath::quat_multiply(q_rot_inv, SX::vertcat({0, Path}));
-    SX qP_q = kmath::quat_multiply(qP_tmp, q_rot);
-    Path = qP_q(Slice(1,4), 0);
+    double h = M_PI / 6.0;
+    double a = 0.2;
+    double L = 5;
+    SX theta = h + a * sin(2 * x);
+    SX phi   = 4 * a * cos(x);
+    SX Path  = SX::vertcat({theta, phi, L});
     Function path = Function("path", {x}, {Path});
 
     controller = std::make_shared<KiteNMPF>(kite, path);
     nh = std::make_shared<ros::NodeHandle>(_nh);
     /** set control constraints */
-    double angle_sat = kmath::deg2rad(7.0);
-    DM lbu = DM::vertcat({0.1, -0.03, -angle_sat, -5});
-    DM ubu = DM::vertcat({0.15, 0.03, angle_sat, 5});
+    DM lbu = DM::vertcat({-5, -5});
+    DM ubu = DM::vertcat({5, 5});
 
     /** scaling matrices */
-    DM ScaleX  = DM::diag(DM({0.1, 1/3.0, 1/3.0, 1/2.0, 1/5.0, 1/2.0, 1/3.0, 1/3.0, 1/3.0, 1.0, 1.0, 1.0, 1.0, 1/6.28, 1/6.28}));
-    DM ScaleU = DM::diag(DM({1/0.15, 1/0.2618, 1/0.2618, 1/5.0}));
-    controller->setControlScaling(ScaleU);
-    controller->setStateScaling(ScaleX);
+    //DM ScaleX  = DM::diag(DM({0.1, 1/3.0, 1/3.0, 1/2.0, 1/5.0, 1/2.0, 1/3.0, 1/3.0, 1/3.0, 1.0, 1.0, 1.0, 1.0, 1/6.28, 1/6.28}));
+    //DM ScaleU = DM::diag(DM({1/0.15, 1/0.2618, 1/0.2618, 1/5.0}));
+    //controller->setControlScaling(ScaleU);
+    //controller->setStateScaling(ScaleX);
 
     controller->setLBU(lbu);
     controller->setUBU(ubu);
 
     /** set variable constraints */
-    DM lbx = DM::vertcat({2.0, -DM::inf(1), -DM::inf(1), -4 * M_PI, -4 * M_PI, -4 * M_PI, -DM::inf(1), -DM::inf(1), -DM::inf(1),
-                         -1.01, -1.01, -1.01, -1.01, -DM::inf(1), -DM::inf(1)});
+    DM lbx = DM::vertcat({0, -M_PI_2, -M_PI, -DM::inf(), -DM::inf()});
+    DM ubx = DM::vertcat({M_PI_2, M_PI_2, M_PI, DM::inf(), DM::inf()});
 
-    DM ubx = DM::vertcat({DM::inf(1), DM::inf(1), DM::inf(1), 4 * M_PI, 4 * M_PI, 4 * M_PI, DM::inf(1), DM::inf(1), DM::inf(1),
-                          1.01, 1.01, 1.01, 1.01, DM::inf(1), DM::inf(1)});
+    //DM lbx = DM::vertcat({-DM::inf(), -DM::inf(), -DM::inf(), -DM::inf(), -DM::inf()});
+    //DM ubx = DM::vertcat({DM::inf(), DM::inf(), DM::inf(), DM::inf(), DM::inf()});
 
     controller->setLBX(lbx);
     controller->setUBX(ubx);
 
-    DM vel_ref = 4.0;
+    DM vel_ref = 1.5;
     controller->setReferenceVelocity(vel_ref);
 
     /** create NLP */
     controller->createNLP();
 
     /** create solver for delay compensation */
-    nh->param<double>("delay", transport_delay, 0.2);
+    nh->param<double>("delay", transport_delay, 0.0);
 
     Dict opts;
     opts["tf"]         = transport_delay;
@@ -121,16 +109,16 @@ void KiteNMPF_Node::publish()
 {
     /** pack estimation to ROS message */
     DM opt_ctl = controller->getOptimalControl();
-    control    = opt_ctl(Slice(0,3), opt_ctl.size2() - 1);
+    control    = opt_ctl(0, opt_ctl.size2() - 1);
     std::vector<double> controls = control.get_nonzeros();
     openkite::aircraft_controls control_msg;
 
     if(!controls.empty())
     {
         control_msg.header.stamp = ros::Time::now();
-        control_msg.thrust = controls[0];
-        control_msg.elevator = controls[1];
-        control_msg.rudder = controls[2];
+        control_msg.thrust   = 0;
+        control_msg.elevator = 0;
+        control_msg.rudder   = controls[0];
 
         /** publish current control */
         control_pub.publish(control_msg);
@@ -156,26 +144,29 @@ void KiteNMPF_Node::publish_trajectory()
     for(DMVector::const_iterator it = split_traj.begin(); it != split_traj.end(); std::advance(it, 1))
     {
         std::vector<double> row = (*it).nonzeros();
-        opt_msg.twist[idx].linear.x = row[0];
-        opt_msg.twist[idx].linear.y = row[1];
-        opt_msg.twist[idx].linear.z = row[2];
+        opt_msg.twist[idx].linear.x = 0;
+        opt_msg.twist[idx].linear.y = 0;
+        opt_msg.twist[idx].linear.z = 0;
 
-        opt_msg.twist[idx].angular.x = row[3];
-        opt_msg.twist[idx].angular.y = row[4];
-        opt_msg.twist[idx].angular.z = row[5];
+        opt_msg.twist[idx].angular.x = row[0];
+        opt_msg.twist[idx].angular.y = row[1];
+        opt_msg.twist[idx].angular.z = row[2];
 
-        opt_msg.transforms[idx].translation.x = row[6];
-        opt_msg.transforms[idx].translation.y = row[7];
-        opt_msg.transforms[idx].translation.z = row[8];
+        DM position = kmath::spheric2cart<DM>(row[0], row[1], 5);
 
-        opt_msg.transforms[idx].rotation.w = row[9];
-        opt_msg.transforms[idx].rotation.x = row[10];
-        opt_msg.transforms[idx].rotation.y = row[11];
-        opt_msg.transforms[idx].rotation.z = row[12];
+        opt_msg.transforms[idx].translation.x = static_cast<double>(position[0]);
+        opt_msg.transforms[idx].translation.y = static_cast<double>(position[1]);
+        opt_msg.transforms[idx].translation.z = static_cast<double>(position[2]);
+
+        opt_msg.transforms[idx].rotation.w = 1;
+        opt_msg.transforms[idx].rotation.x = 0;
+        opt_msg.transforms[idx].rotation.y = 0;
+        opt_msg.transforms[idx].rotation.z = 0;
 
         /** virtual state */
         Function path = controller->getPathFunction();
-        DM point  = path(DMVector{row[13]})[0];
+        DM point_sphere  = path(DMVector{row[3]})[0];
+        DM point = kmath::spheric2cart<DM>(point_sphere[1], point_sphere[0], point_sphere[2]);
         std::vector<double> virt_point = point.nonzeros();
 
         opt_msg.wrench[idx].force.x = virt_point[0];
@@ -215,9 +206,10 @@ void KiteNMPF_Node::compute_control()
     if(!opt_traj.is_empty())
     {
         /** transport delay compensation */
-        DM predicted_state = solver->solve(local_copy, control, transport_delay);
+        //DM predicted_state = solver->solve(local_copy, control, transport_delay);
+        DM predicted_state = local_copy;
         //std::cout << "virtual state : " << opt_traj << "\n";
-        augmented_state = DM::vertcat({predicted_state, opt_traj(Slice(13, opt_traj.size1()), opt_traj.size2() - 3)});
+        augmented_state = DM::vertcat({predicted_state, opt_traj(Slice(3, opt_traj.size1()), opt_traj.size2() - 3)});
 
         Dict stats = controller->getStats();
         std::string solve_status = static_cast<std::string>(stats["return_status"]);
@@ -232,17 +224,16 @@ void KiteNMPF_Node::compute_control()
     }
     else
     {
-        DM closest_point = controller->findClosestPointOnPath(kite_state(Slice(6,9)));
+        DM closest_point = controller->findClosestPointOnPath(kite_state(Slice(0,2)));
         std::cout << "Initialiaztion: " << closest_point << "\n";
+        std::cout << kite_state << "\n";
         augmented_state = DM::vertcat({kite_state, closest_point, 0});
     }
-
-    /** @badcode : dirty hack : zero-speed workaround */
-    DM minimal_speed = DM(2.1);
-    if (augmented_state(0, 0).nonzeros()[0] < minimal_speed.nonzeros()[0])
-        augmented_state(0, 0) = minimal_speed;
     /** compute control */
     controller->computeControl(augmented_state);
+
+    //std::cout << "Kite State: " << kite_state << "\n";
+    //std::cout << "Optimal Trajectory" << controller->getOptimalTrajetory() << "\n";
 }
 
 int main(int argc, char **argv)
@@ -251,10 +242,10 @@ int main(int argc, char **argv)
     ros::NodeHandle n;
 
     /** create a kite object */
-    std::string kite_params_file;
-    n.param<std::string>("kite_params", kite_params_file, "umx_radian.yaml");
-    std::cout << kite_params_file << "\n";
-    KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
+    SimpleKinematicKiteProperties kite_props;
+    kite_props.gliding_ratio = 5;
+    kite_props.tether_length = 5;
+    kite_props.wind_speed = 1;
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
@@ -264,7 +255,7 @@ int main(int argc, char **argv)
 
     /** create a NMPF instance */
     KiteNMPF_Node tracker(n, kite_props, algo_props);
-    ros::Rate loop_rate(14); /** 18 Hz */
+    ros::Rate loop_rate(1); /** 18 Hz */
 
     while (ros::ok())
     {
@@ -276,12 +267,14 @@ int main(int argc, char **argv)
             tracker.compute_control();
             double finish = ros::Time::now().toSec();
             tracker.publish();
-            tracker.publish_mpc_diagnostic();
+            //tracker.publish_mpc_diagnostic();
             tracker.comp_time_ms = finish - start;
             std::cout << "Control computational delay: " << finish - start << "\n";
 
             if(broadcast_trajectory)
                 tracker.publish_trajectory();
+
+            //loop_rate.sleep();
         }
         else
         {

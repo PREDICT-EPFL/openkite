@@ -103,6 +103,7 @@ namespace kmath
         return cart_coord;
     }
 
+
     /** Linear Systems Control and Analysis routines */
     struct LinearSystem
     {

@@ -6,8 +6,8 @@ include_directories(${CMAKE_SOURCE_DIR}/src/kite_model ${CMAKE_SOURCE_DIR}/src/k
 add_library(kiteNMPF kiteNMPF.cpp kiteNMPF.h)
 target_link_libraries(kiteNMPF kitemodel)
 
-add_executable(kite_control_test kite_control_test.cpp)
-target_link_libraries(kite_control_test kiteNMPF kiteEKF ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
+#add_executable(kite_control_test kite_control_test.cpp)
+#target_link_libraries(kite_control_test kiteNMPF kiteEKF ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 add_executable(kite_identification_test kite_identification_test.cpp)
 target_link_libraries(kite_identification_test kiteNMPF ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})

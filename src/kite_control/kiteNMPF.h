@@ -10,8 +10,8 @@ enum CollocationType{GLOBAL, MULTIPLE_SHOOTING};
 class KiteNMPF
 {
 public:
-    //KiteNMPF(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps);
-    KiteNMPF(std::shared_ptr<KiteDynamics> _Kite, const casadi::Function &_Path);
+    //KiteNMPF(std::shared_ptr<KiteDynamics> _Kite, const casadi::Function &_Path);
+    KiteNMPF(std::shared_ptr<SimpleKinematicKite> _Kite, const casadi::Function &_Path);
 
     //KiteNMPF(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const casadi::Function &_Path);
     virtual ~KiteNMPF(){}
@@ -31,7 +31,7 @@ public:
     void setControlScaling(const casadi::DM &Scaling){Scale_U = Scaling;
                                                       invSU = casadi::DM::solve(Scale_U, casadi::DM::eye(Scale_U.size1()));}
 
-    void setReferenceVelocity(const casadi::DM &vel_ref){reference_velocity = Scale_X(14,14) * vel_ref;}
+    void setReferenceVelocity(const casadi::DM &vel_ref){reference_velocity = Scale_X(4,4) * vel_ref;}
 
     void setPath(const casadi::SX &_path);
     void createNLP();
@@ -65,7 +65,7 @@ public:
     static const casadi::DM DEFAULT_UBU;
 
 private:
-    std::shared_ptr<KiteDynamics> Kite;
+    std::shared_ptr<SimpleKinematicKite> Kite;
     casadi::SX Path;
     casadi::Function PathFunc;
 

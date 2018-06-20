@@ -9,9 +9,15 @@ void Simulator::controlCallback(const openkite::aircraft_controls::ConstPtr &msg
     controls[2] = msg->rudder;
 }
 
+void Simulator::simple_controlCallback(const openkite::aircraft_controls::ConstPtr &msg)
+{
+    controls[0] = msg->rudder;
+}
+
 Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
 {
     m_object = std::make_shared<ODESolver>(object);
+    std::cout << "object created \n";
     m_nh     = std::make_shared<ros::NodeHandle>(nh);
 
     /** define dimensions first given solver object */
@@ -31,7 +37,7 @@ Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
     state_pub = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/kite_state", 100);
 
     std::string control_topic = "/kite_controls";
-    control_sub = m_nh->subscribe(control_topic, 100, &Simulator::controlCallback, this);
+    control_sub = m_nh->subscribe(control_topic, 100, &Simulator::simple_controlCallback, this);
 
     msg_state.twist.resize(1);
     msg_state.transforms.resize(1);
@@ -47,31 +53,33 @@ void Simulator::simulate()
 
     state = m_object->solve(state, controls, dt);
     //std::cout << "length : " << DM::norm_2(state(Slice(6,9))) << "\n";
-    //std::cout << "State: " << state << "\n";
+    std::cout << "State: " << state << " Controls : " << controls << "\n";
 }
 
 void Simulator::publish_state()
 {
-    std::vector<double> state_vec = state.nonzeros();
-
+    DM state = getState();
+    DM L = 5;
+    DM pose = kmath::spheric2cart<DM>(state[1], state[0], L);
+    std::vector<double> pose_vec = pose.nonzeros();
     msg_state.header.stamp = ros::Time::now();
 
-    msg_state.twist[0].linear.x = state_vec[0];
-    msg_state.twist[0].linear.y = state_vec[1];
-    msg_state.twist[0].linear.z = state_vec[2];
+    msg_state.twist[0].linear.x = 0;
+    msg_state.twist[0].linear.y = 0;
+    msg_state.twist[0].linear.z = 0;
 
-    msg_state.twist[0].angular.x = state_vec[3];
-    msg_state.twist[0].angular.y = state_vec[4];
-    msg_state.twist[0].angular.z = state_vec[5];
+    msg_state.twist[0].angular.x = static_cast<double>(state[0]);
+    msg_state.twist[0].angular.y = static_cast<double>(state[1]);
+    msg_state.twist[0].angular.z = static_cast<double>(state[2]);
 
-    msg_state.transforms[0].translation.x = state_vec[6];
-    msg_state.transforms[0].translation.y = state_vec[7];
-    msg_state.transforms[0].translation.z = state_vec[8];
+    msg_state.transforms[0].translation.x = pose_vec[0];
+    msg_state.transforms[0].translation.y = pose_vec[1];
+    msg_state.transforms[0].translation.z = pose_vec[2];
 
-    msg_state.transforms[0].rotation.w = state_vec[9];
-    msg_state.transforms[0].rotation.x = state_vec[10];
-    msg_state.transforms[0].rotation.y = state_vec[11];
-    msg_state.transforms[0].rotation.z = state_vec[12];
+    msg_state.transforms[0].rotation.w = 1;
+    msg_state.transforms[0].rotation.x = 0;
+    msg_state.transforms[0].rotation.y = 0;
+    msg_state.transforms[0].rotation.z = 0;
 
     /** publish current state estimation */
     state_pub.publish(msg_state);
@@ -79,7 +87,9 @@ void Simulator::publish_state()
 
 void Simulator::publish_pose()
 {
-    DM pose = getPose();
+    DM state = getState();
+    DM L = 5;
+    DM pose = kmath::spheric2cart<DM>(state[1], state[0], L);
     std::vector<double> pose_vec = pose.nonzeros();
 
     geometry_msgs::PoseStamped msg_pose;
@@ -89,10 +99,10 @@ void Simulator::publish_pose()
     msg_pose.pose.position.y = pose_vec[1];
     msg_pose.pose.position.z = pose_vec[2];
 
-    msg_pose.pose.orientation.w = pose_vec[3];
-    msg_pose.pose.orientation.x = pose_vec[4];
-    msg_pose.pose.orientation.y = pose_vec[5];
-    msg_pose.pose.orientation.z = pose_vec[6];
+    msg_pose.pose.orientation.w = 1;
+    msg_pose.pose.orientation.x = 0;
+    msg_pose.pose.orientation.y = 0;
+    msg_pose.pose.orientation.z = 0;
 
     pose_pub.publish(msg_pose);
 }
@@ -103,14 +113,15 @@ int main(int argc, char **argv)
     ros::NodeHandle n("~");
 
     /** create a kite object */
-    std::string kite_params_file;
-    n.param<std::string>("kite_params", kite_params_file, "./umx_radian.yaml");
-    std::cout << "Using kite parameters from : " << kite_params_file << "\n";
-    KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
-    KiteDynamics kite = KiteDynamics(kite_props, algo_props);
+    SimpleKinematicKiteProperties kite_props;
+    kite_props.wind_speed = 1; //[m/s]
+    kite_props.gliding_ratio = 5;
+    kite_props.tether_length = 5; //[m]
+
+    SimpleKinematicKite kite = SimpleKinematicKite(algo_props, kite_props);
 
     int broadcast_state;
     n.param<int>("broadcast_state", broadcast_state, 1);

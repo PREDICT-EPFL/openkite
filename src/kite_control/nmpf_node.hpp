@@ -15,7 +15,7 @@
 class KiteNMPF_Node
 {
 public:
-    KiteNMPF_Node(const ros::NodeHandle &_nh, const KiteProperties &kite_props,
+    KiteNMPF_Node(const ros::NodeHandle &_nh, const SimpleKinematicKiteProperties &kite_props,
                                               const AlgorithmProperties &algo_props );
     virtual ~KiteNMPF_Node(){}
 
@@ -57,4 +57,3 @@ private:
 
 
 #endif // NMPF_NODE_HPP
-

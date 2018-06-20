@@ -72,9 +72,6 @@ struct TetherProperties
     double length;
     double Ks;
     double Kd;
-    double rx;
-    double ry;
-    double rz;
 };
 
 struct KiteProperties
@@ -84,6 +81,13 @@ struct KiteProperties
     PlaneInertia Inertia;
     PlaneAerodynamics Aerodynamics;
     TetherProperties Tether;
+};
+
+struct SimpleKinematicKiteProperties
+{
+    double tether_length;
+    double wind_speed;
+    double gliding_ratio;
 };
 
 struct AlgorithmProperties
@@ -123,8 +127,6 @@ public:
     casadi::Function getNumericIntegrator(){return this->NumIntegrator;}
     casadi::Function getNumericJacobian(){return this->NumJacobian;}
 
-    casadi::Function getAeroDynamicForces(){return this->AeroDynamics;}
-
 private:
     //state variables
     casadi::SX State;
@@ -145,8 +147,6 @@ private:
     casadi::Function NumIntegrator;
     //numerical jacobian evaluation
     casadi::Function NumJacobian;
-
-    casadi::Function AeroDynamics;
 };
 
 /** 6-DoF Kinematics of a Rigid Body */
@@ -170,6 +170,31 @@ private:
     casadi::Function NumJacobian;
     /** numerical evaluation of system dynamics */
     casadi::Function NumDynamics;
+};
+
+/** Relatively simple kite model : tricycle on a sphere */
+class SimpleKinematicKite
+{
+public:
+    SimpleKinematicKite(const AlgorithmProperties &AlgoProps, const SimpleKinematicKiteProperties &KiteProps);
+    virtual ~SimpleKinematicKite(){}
+
+    casadi::Function getNumericJacobian(){return NumJacobian;}
+    casadi::Function getNumericDynamics(){return NumDynamics;}
+    casadi::Function getNumericIntegrator(){return NumIntegrator;}
+
+    casadi::SX getSymbolicDynamics(){return Dynamics;}
+    casadi::SX getSymbolicState(){return state;}
+    casadi::SX getSymbolicControl(){return control;}
+
+private:
+    casadi::SX state;
+    casadi::SX control;
+    casadi::SX Dynamics;
+
+    casadi::Function NumDynamics;
+    casadi::Function NumJacobian;
+    casadi::Function NumIntegrator;
 };
 
 

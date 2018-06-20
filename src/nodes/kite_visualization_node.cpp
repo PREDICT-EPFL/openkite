@@ -148,17 +148,18 @@ KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh)
     /** configure kite_marker */
     MarkerProperties m_props;
     m_props.id = 101;
-    m_props.type = visualization_msgs::Marker::MESH_RESOURCE;
-    m_props.mesh_resource = "package://openkite/meshes/kite_rviz.dae";
-    m_props.scale = Scale(0.1, 0.1, 0.1);
-    m_props.color = Color(0.0, 1.0, 0.0, 0.5);
+    m_props.type = visualization_msgs::Marker::SPHERE;
+    //m_props.type = visualization_msgs::Marker::MESH_RESOURCE;
+    //m_props.mesh_resource = "package://openkite/meshes/kite_rviz.dae";
+    m_props.scale = Scale(0.2, 0.2, 0.2);
+    m_props.color = Color(1.0, 0.0, 0.0, 1.0);
     m_props.configureMarker(m_kite_marker);
     m_kite_marker.lifetime = ros::Duration();
 
     /** configure virtual state trajectory */
     m_props.id = 201;
     m_props.type  = visualization_msgs::Marker::SPHERE_LIST;
-    m_props.color = Color(1.0, 0.0, 0.0, 0.5);
+    m_props.color = Color(0.0, 0.0, 1.0, 0.5);
     m_props.configureMarker(virtual_state_markers);
     virtual_state_markers.lifetime = ros::Duration();
 
@@ -188,20 +189,19 @@ void KiteVisualizer::filterCallback(const sensor_msgs::MultiDOFJointState::Const
     /** @badcode: */
     DM pose = convertToDM(*msg);
     DM norm = DM::norm_2(pose(Slice(0,3)));
-    if(norm.nonzeros()[0] >= 2.67)
+    if(norm.nonzeros()[0] >= 2.74)
         tether_active = true;
     else
         tether_active = false;
 
-    DM kite_state_dm = world2rviz(pose);
-   state2marker(kite_state_dm, m_kite_marker);
+    //DM kite_state_dm = world2rviz(pose);
+    state2marker(pose, m_kite_marker);
     initialized = true;
 }
 
 void KiteVisualizer::controlCallback(const sensor_msgs::MultiDOFJointState::ConstPtr &msg)
 {
     optimal_trajectory = convertToDM(*msg, true);
-    //optimal_trajectory = world2rviz(pose);
 }
 
 DM KiteVisualizer::convertToDM(const sensor_msgs::MultiDOFJointState &_value, const bool &with_virtual)
@@ -275,9 +275,9 @@ visualization_msgs::MarkerArray KiteVisualizer::getOptimalTrajectory()
     DMVector::const_iterator it = split_traj.begin();
     while(std::distance<DMVector::const_iterator>(it, split_traj.end()) > 0)
     {
-        DM state = world2rviz(*it);
+        DM state = (*it);
         //std::cout << state << "\n";
-        id_counter += 2;
+        id_counter += 1;
 
         std::vector<double> row = state.nonzeros();
         tmp_marker.pose.position.x = row[0];
@@ -292,7 +292,7 @@ visualization_msgs::MarkerArray KiteVisualizer::getOptimalTrajectory()
         tmp_marker.id = id_counter;
 
         m_array.markers.push_back(tmp_marker);
-        std::advance(it, 2);
+        std::advance(it, 1);
     }
     return m_array;
 }
@@ -311,7 +311,6 @@ visualization_msgs::Marker KiteVisualizer::getVirtualTrajectory()
     while( std::distance<DMVector::const_iterator>(it, split_traj.end()) > 0)
     {
         DM point = (*it)(Slice(7, 10));
-        point = world2rviz(point);
         geometry_msgs::Point p;
         std::vector<double> coords = point.nonzeros();
         p.x = coords[0];
@@ -319,7 +318,7 @@ visualization_msgs::Marker KiteVisualizer::getVirtualTrajectory()
         p.z = coords[2];
 
         m_array.points.push_back(p);
-        std::advance(it, 2);
+        std::advance(it, 1);
     }
 
     return m_array;
@@ -385,22 +384,21 @@ int main( int argc, char** argv )
 
     /** create a path */
     SX x = SX::sym("x");
-    double radius   = 2.72;
-    double altitude = 0.0;
-    SX Path = SX::vertcat(SXVector{radius * cos(x), radius * sin(x), altitude});
-    /** rotate path */
-    SX q_rot = SX::vertcat({cos(0 / 24), 0, sin(0 / 24), 0});
-    SX q_rot_inv = kmath::quat_inverse(q_rot);
-    SX qP_tmp = kmath::quat_multiply(q_rot_inv, SX::vertcat({0, Path}));
-    SX qP_q = kmath::quat_multiply(qP_tmp, q_rot);
-    Path = qP_q(Slice(1,4), 0);
+    double h = M_PI / 6.0;
+    double a = 0.2;
+    double L = 5;
+    SX theta = h + a * sin(2 * x);
+    SX phi   = 4 * a * cos(x);
+    SX Path  = SX::vertcat({theta, phi, L});
 
     Function path_fun = Function("path", {x}, {Path});
     for(double alpha = 0; alpha < 2 * M_PI; alpha += 0.2)
     {
         DMVector res = path_fun( DMVector{DM(alpha)} );
+        DM sphere_point = res[0];
+        DM point = kmath::spheric2cart<DM>(sphere_point[1], sphere_point[0], sphere_point[2]);
+
         geometry_msgs::Point p;
-        DM point = res[0];
         p.x = point.nonzeros()[0];
         p.y = point.nonzeros()[1];
         p.z = point.nonzeros()[2];
@@ -437,8 +435,12 @@ int main( int argc, char** argv )
         /** draw optimal trajectories */
         visualization_msgs::Marker virt_markers = kite.getVirtualTrajectory();
         visualization_msgs::MarkerArray opt_markers = kite.getOptimalTrajectory();
-        if(!opt_markers.markers.empty())
-            trajec_pub.publish(opt_markers);
+
+        //std::cout << "Kite : " << kite_marker << "\n";
+        //std::cout << "Opt Traj : " << opt_markers << "\n";
+
+        //if(!opt_markers.markers.empty())
+        //    trajec_pub.publish(opt_markers);
 
         if(!virt_markers.points.empty())
             marker_pub.publish(virt_markers);

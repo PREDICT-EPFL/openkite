@@ -68,9 +68,6 @@ namespace kite_utils
         props.Tether.length = config["tether"]["length"].as<double>();
         props.Tether.Ks     = config["tether"]["Ks"].as<double>();
         props.Tether.Kd     = config["tether"]["Kd"].as<double>();
-        props.Tether.rx     = config["tether"]["rx"].as<double>();
-        props.Tether.ry     = config["tether"]["ry"].as<double>();
-        props.Tether.rz     = config["tether"]["rz"].as<double>();
 
         return props;
     }
@@ -170,9 +167,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     double Ks = KiteProps.Tether.Ks;
     double Kd = KiteProps.Tether.Kd;
     double Lt = KiteProps.Tether.length;
-    double rx = KiteProps.Tether.rx;
-    double ry = KiteProps.Tether.ry;
-    double rz = KiteProps.Tether.rz;
 
     /** -------------------------- **/
     /** State variables definition **/
@@ -265,6 +259,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX R_b = qR_q(Slice(1,4), 0);
 
     /** Total external forces devided by glider's mass (linear acceleration) */
+    /** @todo : ADD TETHER FORCE */
     auto v_dot = (Faero_b + T_b + R_b)/Mass + G_b - SX::cross(w,v);
 
     /** ------------------------- */
@@ -295,11 +290,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX Trot = kmath::quat_multiply(T_tmp, q_aoa);
     auto Maero = Trot(Slice(1,4), 0);
 
-    /** Moment introduced by tether */
-    DM tether_arm = DM({rx, ry, rz});
-    SX Mt = SX::cross(tether_arm, R_b);
-
-    auto w_dot = SX::mtimes( SX::inv(J),  (Maero + Mt - SX::cross(w, SX::mtimes(J, w))) );
+    auto w_dot = SX::mtimes( SX::inv(J),  (Maero - SX::cross(w, SX::mtimes(J, w))) );
 
     /** ----------------------------- */
     /** Kinematic Equations: Position */
@@ -313,8 +304,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** Kinematic Equations: Attitude */
     /** ----------------------------- */
     /** Aircraft attitude wrt to IRF  */
-    double lambda = -5;
-    auto q_dot = 0.5 * kmath::quat_multiply(q, SX::vertcat({0, w})) + 0.5 * lambda * q * ( SX::dot(q,q) - 1 );
+    auto q_dot = 0.5 * kmath::quat_multiply(q, SX::vertcat({0, w}));
 
     /** Complete dynamics of the Kite */
     auto state = SX::vertcat({v, w, r, q});
@@ -327,7 +317,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX d_jacobian = SX::jacobian(dynamics,state);
     Function dyn_jac = Function("dyn_jacobian",{state, control}, {d_jacobian});
 
-    AeroDynamics = Function("Aero",{state, control},{Faero_b});
     /** define RK4 integrator scheme */
     SX X = SX::sym("X", 13);
     SX U = SX::sym("U", 3);
@@ -389,7 +378,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** Static aerodynamic coefficients **/
     /** ------------------------------- **/
     double e_o = KiteProps.Aerodynamics.e_oswald;
-    SX CL0     = SX::sym("Cl0");
+    double CL0 = KiteProps.Aerodynamics.CL0;
     SX CLa_tot = SX::sym("Cla_tot");
     SX CD0_tot = SX::sym("CD0_tot");
     SX CYb     = SX::sym("CYb");
@@ -424,9 +413,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     double Ks = KiteProps.Tether.Ks;
     double Kd = KiteProps.Tether.Kd;
     double Lt = KiteProps.Tether.length;
-    double rx = KiteProps.Tether.rx;
-    double ry = KiteProps.Tether.ry;
-    double rz = KiteProps.Tether.rz;
 
     /** -------------------------- **/
     /** State variables definition **/
@@ -440,7 +426,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** Control variables definition **/
     /** ---------------------------- **/
     /** @todo: consider more detailed propeller model **/
-    SX T  = SX::sym("T");   /** propeller propulsion : applies along X-axis in BRF [N] **/
+    SX T = SX::sym("T");   /** propeller propulsion : applies along X-axis in BRF [N] **/
     SX dE = SX::sym("dE"); /** elevator deflection [positive down] [rad]              **/
     SX dR = SX::sym("dR"); /** rudder deflection [rad]                                **/
 
@@ -544,11 +530,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX Trot = kmath::quat_multiply(T_tmp, q_aoa);
     auto Maero = Trot(Slice(1,4), 0);
 
-    /** Moment introduced by tether */
-    SX tether_arm = SX::vertcat({rx, ry, rz});
-    SX Mt = SX::cross(tether_arm, R_b);
-
-    auto w_dot = SX::mtimes( SX::inv(J),  (Maero + Mt - SX::cross(w, SX::mtimes(J, w))) );
+    auto w_dot = SX::mtimes( SX::inv(J),  (Maero - SX::cross(w, SX::mtimes(J, w))) );
 
     /** ----------------------------- */
     /** Kinematic Equations: Position */
@@ -562,13 +544,12 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** Kinematic Equations: Attitude */
     /** ----------------------------- */
     /** Aircraft attitude wrt to IRF  */
-    double lambda = -5;
-    auto q_dot = 0.5 * kmath::quat_multiply(q, SX::vertcat({0, w})) + 0.5 * lambda * q * ( SX::dot(q,q) - 1 );
+    auto q_dot = 0.5 * kmath::quat_multiply(q, SX::vertcat({0, w}));
 
     /** Complete dynamics of the Kite */
     auto state = SX::vertcat({v, w, r, q});
     auto control = SX::vertcat({T, dE, dR});
-    auto params  = SX::vertcat({CL0, CLa_tot, CD0_tot, CYb, Cm0, Cma, Cnb, Clb, CLq, Cmq,
+    auto params  = SX::vertcat({CLa_tot, CD0_tot, CYb, Cm0, Cma, Cnb, Clb, CLq, Cmq,
                                 CYr, Cnr, Clr, CYp, Clp, Cnp, CLde, CYdr, Cmde, Cndr, Cldr});
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
@@ -660,3 +641,46 @@ RigidBodyKinematics::RigidBodyKinematics(const AlgorithmProperties &AlgoProps)
     NumIntegartor = CVODES_INT;
 }
 
+SimpleKinematicKite::SimpleKinematicKite(const AlgorithmProperties &AlgoProps, const SimpleKinematicKiteProperties &KiteProps)
+{
+    SX theta = SX::sym("theta");
+    SX phi   = SX::sym("phi");
+    SX gamma = SX::sym("gamma");
+    state = SX::vertcat({theta, phi, gamma});
+
+    SX u_g   = SX::sym("u_gamma");
+    control = SX::vertcat({u_g});
+
+    double L  = KiteProps.tether_length;
+    double E  = KiteProps.gliding_ratio;
+    double ws = KiteProps.wind_speed;
+
+    /** assume constant tether flight reel-out(in) speed = 0*/
+    double z = 0;
+
+    SX vw = SX::vertcat({ws,0,0});
+    SX M = SX::diag(SX::vertcat({(1/L), (1/L * cos(theta))}));
+    SX R_GN = SX::zeros(3,3);
+    R_GN(0,0) = -sin(theta) * cos(phi);  R_GN(0,1) = -sin(theta);  R_GN(0,2) = -cos(theta) * cos(phi);
+    R_GN(1,0) = -sin(theta) * sin(phi);  R_GN(1,1) = cos(theta);   R_GN(1,2) = -cos(theta) * sin(phi);
+    R_GN(2,2) = cos(theta);              R_GN(2,1) = 0;            R_GN(2,2) = -sin(theta);
+
+    SX Rb_NK = SX::zeros(2,2);
+    SX R_NK    = SX::eye(3);
+    Rb_NK(0,0) = cos(gamma);  Rb_NK(0,1) = -sin(gamma);
+    Rb_NK(1,0) = sin(gamma);  Rb_NK(1,1) = cos(gamma);
+    R_NK(Slice(0,2), Slice(0,2)) = Rb_NK;
+
+    SX EM = SX::zeros(2,3);
+    EM(0,0) = 1; EM(0,2) = -E;
+
+    /** multiplications */
+    SX MRb_NKE = SX::mtimes(SX::mtimes(M, Rb_NK), EM);
+    SX MRb_NKERNR = SX::mtimes(SX::mtimes(MRb_NKE, R_NK.T()), R_GN.T());
+    SX qdot = SX::mtimes(MRb_NKERNR, vw) - SX::mtimes(Rb_NK, SX::vertcat({E * z, 0}));
+    Dynamics = SX::vertcat({qdot, u_g});
+    NumDynamics = Function("SKK_Dynamics", {state, control}, {Dynamics});
+
+    SX Jacobian = SX::jacobian(Dynamics, state);
+    NumJacobian = Function("SKK_Jacobian", {state, control}, {Jacobian});
+}
