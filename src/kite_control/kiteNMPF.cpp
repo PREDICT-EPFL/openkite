@@ -31,7 +31,7 @@ KiteNMPF::KiteNMPF(std::shared_ptr<SimpleKinematicKite> _Kite, const Function &_
 
     Q  =  0.5 * SX::diag(SX::vertcat({1e3, 1e3}));
     R  =  SX::diag(SX::vertcat({1e-3, 1e-1}));
-    W  = 5 * 1e1;
+    W  =  1e-1;
 
     Scale_X = DM::eye(5); invSX = DM::eye(5);
     Scale_U = DM::eye(2);  invSU = DM::eye(2);
@@ -93,6 +93,7 @@ void KiteNMPF::createNLP()
 
     SX x = SX::sym("x", dimx);
     SX u = SX::sym("u", dimu);
+    double tf = 1.0;
 
     if(scale)
     {
@@ -100,18 +101,18 @@ void KiteNMPF::createNLP()
         SODE = SX::mtimes(Scale_X, SODE);
         Function FunSODE = Function("scaled_ode", {x, u}, {SODE});
 
-        diff_constr = spectral.CollocateDynamics(FunSODE, 0, 1.0);
+        diff_constr = spectral.CollocateDynamics(FunSODE, 0, tf);
     }
     else
     {
-        diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, 1.0);
+        diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
     }
 
     diff_constr = diff_constr;
     //diff_constr = diff_constr(Slice(0, diff_constr.size1() - dimx));
 
     /** define an integral cost */
-    SX lagrange, residual;
+    SX lagrange, residual, cart_residual;
     if(scale)
     {
         SXVector tmp = PathFunc(SXVector{SX::mtimes(invSX(3,3), x[3])});
@@ -127,17 +128,20 @@ void KiteNMPF::createNLP()
         residual  = sym_path(Slice(0,2)) - x(Slice(0,2));
         lagrange  = SX::sumRows( SX::mtimes(Q, pow(residual, 2)) ) + SX::sumRows( SX::mtimes(W, pow(reference_velocity - x[4], 2)) );
         lagrange = lagrange + SX::sumRows( SX::mtimes(R, pow(u, 2)) );
+
+        cart_residual = kmath::spheric2cart<SX>(sym_path[0], sym_path[1], 5) - kmath::spheric2cart<SX>(x[0], x[1], 5);
+        cart_residual = SX::norm_2(cart_residual);
     }
 
     Function LagrangeTerm = Function("Lagrange", {x, u}, {lagrange});
 
     /** trace functions */
-    PathError = Function("PathError", {x}, {residual});
+    PathError = Function("PathError", {x}, {cart_residual});
     VelError  = Function("VelError", {x}, {reference_velocity - x[4]});
 
     SX mayer     =  SX::sumRows( SX::mtimes(Q, pow(residual, 2)) );
     Function MayerTerm    = Function("Mayer",{x}, {mayer});
-    SX performance_idx = spectral.CollocateCost(MayerTerm, LagrangeTerm, 0, 1);
+    SX performance_idx = spectral.CollocateCost(MayerTerm, LagrangeTerm, 0, tf);
 
     SX varx = spectral.VarX();
     SX varu = spectral.VarU();

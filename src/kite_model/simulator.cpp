@@ -117,7 +117,7 @@ int main(int argc, char **argv)
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
     SimpleKinematicKiteProperties kite_props;
-    kite_props.wind_speed = 1; //[m/s]
+    kite_props.wind_speed = 1.1; //[m/s]
     kite_props.gliding_ratio = 5;
     kite_props.tether_length = 5; //[m]
 

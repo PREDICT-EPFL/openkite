@@ -31,8 +31,8 @@ KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh, const SimpleKinematicKi
     controller = std::make_shared<KiteNMPF>(kite, path);
     nh = std::make_shared<ros::NodeHandle>(_nh);
     /** set control constraints */
-    DM lbu = DM::vertcat({-5, -5});
-    DM ubu = DM::vertcat({5, 5});
+    DM lbu = DM::vertcat({-4, -5});
+    DM ubu = DM::vertcat({4, 5});
 
     /** scaling matrices */
     //DM ScaleX  = DM::diag(DM({0.1, 1/3.0, 1/3.0, 1/2.0, 1/5.0, 1/2.0, 1/3.0, 1/3.0, 1/3.0, 1.0, 1.0, 1.0, 1.0, 1/6.28, 1/6.28}));
@@ -245,7 +245,7 @@ int main(int argc, char **argv)
     SimpleKinematicKiteProperties kite_props;
     kite_props.gliding_ratio = 5;
     kite_props.tether_length = 5;
-    kite_props.wind_speed = 1;
+    kite_props.wind_speed = 1.1;
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
@@ -255,7 +255,7 @@ int main(int argc, char **argv)
 
     /** create a NMPF instance */
     KiteNMPF_Node tracker(n, kite_props, algo_props);
-    ros::Rate loop_rate(1); /** 18 Hz */
+    ros::Rate loop_rate(100); /** 18 Hz */
 
     while (ros::ok())
     {
@@ -267,14 +267,14 @@ int main(int argc, char **argv)
             tracker.compute_control();
             double finish = ros::Time::now().toSec();
             tracker.publish();
-            //tracker.publish_mpc_diagnostic();
+            tracker.publish_mpc_diagnostic();
             tracker.comp_time_ms = finish - start;
             std::cout << "Control computational delay: " << finish - start << "\n";
 
             if(broadcast_trajectory)
                 tracker.publish_trajectory();
 
-            //loop_rate.sleep();
+            loop_rate.sleep();
         }
         else
         {
