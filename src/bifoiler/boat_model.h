@@ -9,7 +9,8 @@ namespace bifoiler {
 class BoatDynamics
 {
 public:
-    BoatDynamics(const BoatProperties &boat_prop);
+    BoatDynamics(const BoatProperties &prop);
+    BoatDynamics(const BoatProperties &boat_prop, const bool id_flag);
 
     casadi::SX getSymbolicState(){return this->State;}
     casadi::SX getSymbolicControl(){return this->Control;}
@@ -31,6 +32,15 @@ public:
                               casadi::SX &Mhbrf,
                               casadi::SX &aoa,
                               casadi::SX &ssa);
+
+    static void Hydrodynamics(const casadi::SX &state,
+                              const casadi::SX &control,
+                              const BoatProperties &prop,
+                              casadi::SX &Fhbrf,
+                              casadi::SX &Mhbrf,
+                              casadi::SX &aoa,
+                              casadi::SX &ssa);
+
     static void Propulsion(const casadi::SX &state,
                            const casadi::SX &control,
                            const BoatProperties &prop,
