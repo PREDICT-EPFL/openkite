@@ -3,24 +3,20 @@
 #include <boost/test/included/unit_test.hpp>
 
 #include "integrator.h"
-#include "kite.h"
+#include "boat_model.h"
 
 using namespace casadi;
 
 BOOST_AUTO_TEST_SUITE( kite_model_suite_test )
 
 BOOST_AUTO_TEST_CASE( ode_solver_test )
-{
-    std::string kite_config_file = "umx_radian3.yaml";
-    KiteProperties kite_props = kite_utils::LoadProperties(kite_config_file);
-    AlgorithmProperties algo_props;
-    algo_props.Integrator = RK4;
+{   
+    std::string boat_config_file = "config.yaml";
+    BoatProperties boat_props = BoatProperties::Load(boat_config_file);
 
-    /** SCALING */
-    //kite_props.Tether.length = kite_props.Tether.length / 3;
-
-    KiteDynamics kite(kite_props, algo_props);
-    Function ode = kite.getNumericDynamics();
+    bifoiler::BoatDynamics boat(boat_props, true);
+    bifoiler::BoatDynamics boat_int(boat_props);    //integration model
+    Function ode = boat_int.getNumericDynamics();
 
     /** compare three ode solvers */
     Dict opts;
@@ -51,9 +47,6 @@ BOOST_AUTO_TEST_CASE( ode_solver_test )
 
     /** solve a problem */
     DM rk4_sol, cheb_sol, cv_sol, ps_sol;
-    //DM init_state = DM::vertcat({0.318732, 0.182552, 0.254833, 1.85435, -0.142882, -0.168359,
-    //                          -0.229383, -0.0500282, -0.746832, 0.189409, -0.836349, -0.48178, 0.180367});
-    //DM control = DM::vertcat({0.3, kmath::deg2rad(5), -kmath::deg2rad(2)});
 
     DM init_state = DM::vertcat({7.2547334e+00, -5.9953832e-01, 1.5621571e+00, 6.4458230e-01, -1.9436366e+00,
                                  -1.9995872e+00, 1.6915701e+00, -2.0761443e+00, -3.6169709e-01, 4.0336430e-01, 1.5472226e-01, -3.7687924e-01, -8.1934426e-01});
