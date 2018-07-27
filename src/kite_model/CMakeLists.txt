@@ -11,7 +11,7 @@ add_library(odesolver integrator.cpp integrator.h)
 target_link_libraries(odesolver kitemath kitemodel)
 
 add_executable(kite_model_test kite_model_test.cpp)
-target_link_libraries(kite_model_test odesolver kitemodel ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
+target_link_libraries(kite_model_test odesolver bifoiler kitemodel ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 add_executable(simulator simulator.cpp simulator.h)
 target_link_libraries(simulator kitemodel odesolver ${catkin_LIBRARIES})

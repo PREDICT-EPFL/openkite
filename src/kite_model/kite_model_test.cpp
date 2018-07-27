@@ -4,6 +4,7 @@
 
 #include "integrator.h"
 #include "boat_model.h"
+#include "kite.h"
 
 using namespace casadi;
 
@@ -32,12 +33,6 @@ BOOST_AUTO_TEST_CASE( ode_solver_test )
     opts["method"] = IntType::CHEBYCHEV;
     ODESolver chebychev_solver(ode, opts);
 
-
-    //kite_props.Tether.length = kite_props.Tether.length / 3;
-    //std::cout << "New tether length : " << kite_props.Tether.length << "\n";
-
-    KiteDynamics kite2(kite_props, algo_props);
-    Function ode2 = kite.getNumericDynamics();
     double tf = 1.0;
     casadi::DMDict props;
     props["scale"] = 0;
