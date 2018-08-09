@@ -132,7 +132,7 @@ PSODESolver<PolyOrder, NumSegments, NX, NU>::PSODESolver(casadi::Function ODE, c
     casadi::SX LBX = casadi::SX::repmat(-casadi::SX::inf(), NX, 1);
     casadi::SX UBX = casadi::SX::repmat(casadi::SX::inf(), NX, 1);
     /** dirty hack */
-    LBX[0] = P(1,1) * 2.0;
+    //LBX[0] = P(1,1) * 2.0;
     casadi::SX lbx = casadi::SX::repmat(LBX, (NumSegments * PolyOrder + 1), 1);
     casadi::SX ubx = casadi::SX::repmat(UBX, (NumSegments * PolyOrder + 1), 1);
 
@@ -144,14 +144,16 @@ PSODESolver<PolyOrder, NumSegments, NX, NU>::PSODESolver(casadi::Function ODE, c
 
     /** formulate NLP */
     NLP["x"] = opt_var;
-    NLP["f"] = casadi::SX::norm_2(G);
-    //NLP["g"] = G;
+    NLP["f"] = 1e-3 * casadi::SX::dot(G,G);
+    //NLP["f"] = 0.0; //0.5 * casadi::SX::dot(G,G);
+    NLP["g"] = G;
 
     OPTS["ipopt.linear_solver"]  = "ma97";
     OPTS["ipopt.print_level"]    = 5;
-    OPTS["ipopt.tol"]            = 1e-5;
-    OPTS["ipopt.acceptable_tol"] = 1e-5;
-    OPTS["ipopt.max_iter"]       = 1000;
+    OPTS["ipopt.tol"]            = 1e-6;
+    OPTS["ipopt.acceptable_tol"] = 1e-6;
+    OPTS["ipopt.max_iter"]       = 3000;
+    OPTS["ipopt.hessian_approximation"] = "limited-memory";
     NLP_Solver = nlpsol("solver", "ipopt", NLP, OPTS);
 
     std::cout << "problem set \n";
@@ -301,35 +303,35 @@ casadi::DMDict PSODESolver<PolyOrder, NumSegments, NX, NU>::solve_trajectory(con
     casadi::DMDict res = NLP_Solver(ARG);
 
     /** try relaxed problem if solve has not succeded */
-    casadi::Dict stats = NLP_Solver.stats();
-    std::string solve_status = static_cast<std::string>(stats["return_status"]);
-    if(solve_status.compare("Solve_Succeeded") != 0)
-    {
-        /** formulate NLP again*/
-        casadi::SXDict RELAXED_NLP;
-        RELAXED_NLP["x"] = opt_var;
-        RELAXED_NLP["f"] = casadi::SX::norm_2(G);
+//    casadi::Dict stats = NLP_Solver.stats();
+//    std::string solve_status = static_cast<std::string>(stats["return_status"]);
+//    if(solve_status.compare("Solve_Succeeded") != 0)
+//    {
+//        /** formulate NLP again*/
+//        casadi::SXDict RELAXED_NLP;
+//        RELAXED_NLP["x"] = opt_var;
+//        RELAXED_NLP["f"] = casadi::SX::norm_2(G);
 
-        OPTS["ipopt.linear_solver"]  = "ma97";
-        OPTS["ipopt.print_level"]    = 5;
-        OPTS["ipopt.tol"]            = 1e-5;
-        OPTS["ipopt.acceptable_tol"] = 1e-5;
-        OPTS["ipopt.max_iter"]       = 1000;
-        NLP_Solver = nlpsol("solver", "ipopt", RELAXED_NLP, OPTS);
+//        OPTS["ipopt.linear_solver"]  = "ma97";
+//        OPTS["ipopt.print_level"]    = 5;
+//        OPTS["ipopt.tol"]            = 1e-5;
+//        OPTS["ipopt.acceptable_tol"] = 1e-5;
+//        OPTS["ipopt.max_iter"]       = 1000;
+//        NLP_Solver = nlpsol("solver", "ipopt", RELAXED_NLP, OPTS);
 
-        ARG["x0"](x_var, 0) = casadi::DM::repmat(X0, (NumSegments * PolyOrder + 1), 1);
-        ARG["x0"](u_var, 0) = U;
+//        ARG["x0"](x_var, 0) = casadi::DM::repmat(X0, (NumSegments * PolyOrder + 1), 1);
+//        ARG["x0"](u_var, 0) = U;
 
-        /** initial point */
-        ARG["lbx"](casadi::Slice(idx_in, idx_out), 0) = X0;
-        ARG["ubx"](casadi::Slice(idx_in, idx_out), 0) = X0;
+//        /** initial point */
+//        ARG["lbx"](casadi::Slice(idx_in, idx_out), 0) = X0;
+//        ARG["ubx"](casadi::Slice(idx_in, idx_out), 0) = X0;
 
-        /** control */
-        ARG["lbx"](u_var, 0) = U;
-        ARG["ubx"](u_var, 0) = U;
+//        /** control */
+//        ARG["lbx"](u_var, 0) = U;
+//        ARG["ubx"](u_var, 0) = U;
 
-        casadi::DMDict relax_res = NLP_Solver(ARG);
-    }
+//        casadi::DMDict relax_res = NLP_Solver(ARG);
+//    }
 
     casadi::DM NLP_X     = res.at("x");
     casadi::DM xt;

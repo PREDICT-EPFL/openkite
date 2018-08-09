@@ -61,7 +61,7 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
 
 
     /** define boat dynamics */
-    std::string boat_config_file = "config.yaml";
+    std::string boat_config_file = "config_id_best.yaml";
     BoatProperties boat_props = BoatProperties::Load(boat_config_file);
 
     bifoiler::BoatDynamics boat(boat_props, true);
@@ -87,7 +87,7 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
     DM UBU = DM::vec(id_control);
 
     /** parameter bounds */
-    YAML::Node config = YAML::LoadFile("config.yaml");
+    YAML::Node config = YAML::LoadFile("config_id_best.yaml");
     double CL0     = config["hydrodynamic"]["CL0"].as<double>();
     double CLa_tot = config["hydrodynamic"]["CLa_total"].as<double>();
     double CD0_tot = config["hydrodynamic"]["CD0_total"].as<double>();
@@ -124,6 +124,34 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
     LBP = -DM::inf(24);
     UBP = DM::inf(24);
 
+    // Min values constraints
+    LBP[0] = 0.13; // CL0
+    LBP[1] = 7.0;  // Cla_total
+    LBP[2] = 0.08; // CDo_total 0.08
+    LBP[4] = -1;  // Cm0 1
+    LBP[5] = -30; // Cma -30
+    LBP[9] = -100; // Cmq -100
+
+    // Max values constraints
+    UBP[1] = 10; // Cla 10
+    UBP[4] = 1; // Cm0 1
+    UBP[5] = 1; // Cma
+    UBP[8] = 100;   // CLq 100
+    UBP[9] = -1;   // Cmq
+    //UBP[14] = -0.5; // Clp
+    //UBP[15] = -0.5; // Cnp
+    //UBP[23]  = -0.01; // Cndr
+
+    // Experimental
+    /**
+    UBP[7] = -0.26; LBP[7] = -0.26; // Clb
+    UBP[12] = 4.24; LBP[12] = 4.24; // Clr
+    UBP[14] = 4.33; LBP[14] = 4.33; // Clp
+    UBP[19] = -0.13; LBP[19] = -0.13; // Clda
+    UBP[20] = 0.017; LBP[20] = 0.017; //Cldr
+    */
+
+
 
     /** ----------------------------------------------------------------------------------*/
     const int num_segments = 20;
@@ -131,7 +159,7 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
     const int dimx         = 13;
     const int dimu         = 4;
     const int dimp         = 24;
-    const double tf        = 19.55;
+    const double tf        = 4.0;
 
     Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
     SX diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
@@ -160,8 +188,8 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
     lbx = SX::vertcat({lbx, LBP});
     ubx = SX::vertcat({ubx, UBP});
 
-
-    DM Q  = SX::diag(SX({1e3, 1e3, 1e3,  1e3, 1e3, 1e3,  1e1, 1e1, 1e1,  1e1, 1e1, 1e1, 1e1})); //good one as well
+    DM Q  = SX::diag(SX({1e3, 1e3, 1e3,  1e4, 1e4, 1e4,  1e1, 1e1, 1e1,  1e4, 1e4, 1e3, 1e3})); //good one as well
+    //DM Q  = SX::diag(SX({0, 0, 0,  1e6, 1e6, 1e6,  0, 0, 0,  1e3, 1e3, 1e3, 1e3}));
     //DM Q = 1e1 * DM::eye(13);
     double alpha = 0.0;
 
@@ -172,11 +200,11 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
     {
         SX measurement = id_data(Slice(0, id_data.size1()), j);
         SX error = measurement - varx_(Slice(0, varx_.size1()), varx_.size2() - j - 1);
-        fitting_error = fitting_error + (1 / DATA_POINTS) * SX::sumRows( SX::mtimes(Q, pow(error, 2)) );
+        fitting_error += static_cast<double>(1.0 / DATA_POINTS) * SX::sumRows( SX::mtimes(Q, pow(error, 2)) );
     }
 
     /** add regularisation */
-    fitting_error = fitting_error + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
+    //fitting_error = fitting_error + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
 
     /** alternative approximation */
     SX x = SX::sym("x",13);
@@ -184,7 +212,7 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
     SX cost_function = SX::sumRows( SX::mtimes(Q, pow(x - y, 2)) );
     Function IdCost = Function("IdCost",{x,y}, {cost_function});
     SX fitting_error2 = spectral.CollocateIdCost(IdCost, id_data, 0, tf);
-    fitting_error2 = fitting_error2 + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
+    //fitting_error2 = fitting_error2 + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
 
     /** formulate NLP */
     SXDict NLP;
@@ -217,26 +245,56 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
 
     PSODESolver<poly_order,num_segments,dimx,dimu>ps_solver(ode, tf, props);
 
-    DM x0 = id_data(Slice(0, id_data.size1()), 0);
+    //DM init_state = DM::vertcat({5.4663474e+00,   8.6672711e-01,   6.5021107e-02,  -1.0385855e-01,  -6.0455710e-02 ,  2.0441055e-01,
+    //                             -2.3351574e+00,   4.3712858e+01,   9.3579102e-01,  -3.0662162e-02,   3.0009789e-02,  -7.5182736e-01,  -6.5796280e-01});
+    //DM init_control = DM::vertcat({-4.8015300e-02,   1.2532470e-01,   3.0563000e-02,   6.8800000e-01});
+
+    DM init_state = DM::vertcat({5.4663474e+00,   8.6672711e-01,   6.5021107e-02,  -1.0385855e-01,  -6.0455710e-02,   2.0441055e-01,
+                                 -2.3351574e+00,   4.3712858e+01,   9.3579102e-01,  -3.0662162e-02,   3.0009789e-02,  -7.5182736e-01,  -6.5796280e-01});
+    DM init_control = DM::vertcat({-4.8015300e-02,   1.2532470e-02,   3.0563000e-02,   6.8800000e-01});
+    init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
+
+    //DM x0 = id_data(Slice(0, id_data.size1()), 0);
     //std::cout << DM::vec(id_data) << "\n";
     //DM x0 = DM::repmat(id_data(Slice(0, 13), (NumSegments * PolyOrder + 1), 1);
-    DMDict solution = ps_solver.solve_trajectory(x0, LBU, true);
-    DM feasible_state = solution.at("x");
+    DMDict solution = ps_solver.solve_trajectory(init_state, LBU, true);
 
-    /**
-    DM feasible_state = DM::reshape(id_data, dimx * (num_segments * poly_order + 1), 1);
+    //DMDict solution   = ps_solver.solve_trajectory(init_state, init_control, true);
+    DM feasible_state = solution.at("x");
+    std::cout << "SIZE: " << feasible_state.size1() << "\n";
+
+    std::ofstream trajectory_file("integrated_trajectory.txt", std::ios::out);
+
+    if(!trajectory_file.fail())
+    {
+        for (int i = 0; i < varx.size1(); i = i + 13)
+        {
+            std::vector<double> tmp = feasible_state(Slice(i, i + 13),0).nonzeros();
+            for (uint j = 0; j < tmp.size(); j++)
+            {
+                trajectory_file << tmp[j] << " ";
+            }
+            trajectory_file << "\n";
+        }
+    }
+    trajectory_file.close();
+
+    std::cout << "Initial guess computed. \n";
+
+
+    //DM feasible_state = DM::reshape(id_data, dimx * (num_segments * poly_order + 1), 1);
     //DM feasible_state = DM::repmat(id_data(Slice(0, id_data.size1()), 0), (num_segments * poly_order + 1), 1);
     DM feasible_control = (UBU + LBU) / 2;
 
-    ARG["x0"] = DM::vertcat(DMVector{feasible_state, feasible_control, REF_P});
-    //ARG["x0"] = DM::vertcat(DMVector{feasible_state, REF_P});
-    //ARG["lam_g0"] = solution.at("lam_g");
-    //ARG["lam_x0"] = DM::vertcat({solution.at("lam_x"), DM::zeros(REF_P.size1())});
+    //ARG["x0"] = DM::vertcat(DMVector{feasible_state, feasible_control, REF_P});
+    ARG["x0"] = DM::vertcat(DMVector{feasible_state, REF_P});
+    ARG["lam_g0"] = solution.at("lam_g");
+    ARG["lam_x0"] = DM::vertcat({solution.at("lam_x"), DM::zeros(REF_P.size1())});
 
     int idx_in = num_segments * poly_order * dimx;
     int idx_out = idx_in + dimx;
-    ARG["lbx"](Slice(idx_in, idx_out), 0) = x0;
-    ARG["ubx"](Slice(idx_in, idx_out), 0) = x0;
+    ARG["lbx"](Slice(idx_in, idx_out), 0) = init_state;
+    ARG["ubx"](Slice(idx_in, idx_out), 0) = init_state;
 
     DMDict res = NLP_Solver(ARG);
     DM result = res.at("x");
@@ -246,25 +304,23 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
 
     DM trajectory = result(Slice(0, varx.size1()));
     //DM trajectory = DM::reshape(traj, DATA_POINTS, dimx );
-    std::ofstream trajectory_file("estimated_trajectory.txt", std::ios::out);
+    std::ofstream est_trajectory_file("estimated_trajectory.txt", std::ios::out);
 
-    if(!trajectory_file.fail())
+    if(!est_trajectory_file.fail())
     {
         for (int i = 0; i < trajectory.size1(); i = i + dimx)
         {
             std::vector<double> tmp = trajectory(Slice(i, i + dimx),0).nonzeros();
             for (uint j = 0; j < tmp.size(); j++)
             {
-                trajectory_file << tmp[j] << " ";
+                est_trajectory_file << tmp[j] << " ";
             }
-            trajectory_file << "\n";
+            est_trajectory_file << "\n";
         }
     }
-    trajectory_file.close();
-    */
+    est_trajectory_file.close();
 
     /** update parameter file */
-    /**
     config["hydrodynamic"]["CL0"] = new_params_vec[0];
     config["hydrodynamic"]["CLa_total"] = new_params_vec[1];
     config["hydrodynamic"]["CD0_total"] = new_params_vec[2];
@@ -296,7 +352,6 @@ BOOST_AUTO_TEST_CASE( bifoiler_id_test )
 
     std::ofstream fout("config_id.yaml");
     fout << config;
-    */
 
     BOOST_CHECK(true);
 }
