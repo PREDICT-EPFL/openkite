@@ -16,15 +16,18 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     /** Load identification data */
     std::ifstream id_data_file("id_data_state.txt", std::ios::in);
     std::ifstream id_control_file("id_data_control.txt", std::ios::in);
-    const int DATA_POINTS = 61;
-    DM id_data    = DM::zeros(13, DATA_POINTS);
-    DM id_control = DM::zeros(3, DATA_POINTS);
+    const int DATA_POINTS = 201;
+    const int state_size   = 13;
+    const int control_size = 3;
+
+    DM id_data    = DM::zeros(state_size, DATA_POINTS);
+    DM id_control = DM::zeros(control_size, DATA_POINTS);
 
     /** load state trajectory */
     if(!id_data_file.fail())
     {
     for(uint i = 0; i < DATA_POINTS; ++i) {
-        for(uint j = 0; j < 13; ++j){
+        for(uint j = 0; j < state_size; ++j){
             double entry;
             id_data_file >> entry;
             id_data(j,i) = entry;
@@ -41,7 +44,7 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     if(!id_control_file.fail())
     {
     for(uint i = 0; i < DATA_POINTS; ++i){
-        for(uint j = 0; j < 3; ++j){
+        for(uint j = 0; j < control_size; ++j){
             double entry;
             id_control_file >> entry;
             /** put in reverse order to comply with Chebyshev method */
@@ -56,21 +59,21 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     }
 
     /** define kite dynamics */
-    std::string kite_params_file = "umx_radian_matlab.yaml";
+    std::string kite_params_file = "umx_radian.yaml";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
 
     AlgorithmProperties algo_props;
     algo_props.Integrator = CVODES;
     algo_props.sampling_time = 0.02;
-    std::shared_ptr<KiteDynamics> kite     = std::make_shared<KiteDynamics>(kite_props, algo_props, true);
-    std::shared_ptr<KiteDynamics> kite_int = std::make_shared<KiteDynamics>(kite_props, algo_props); //integration model
-    Function ode = kite_int->getNumericDynamics();
+    KiteDynamics kite(kite_props, algo_props, true);
+    KiteDynamics kite_int(kite_props, algo_props); //integration model
+    Function ode = kite_int.getNumericDynamics();
 
     /** get dynamics function and state Jacobian */
-    Function DynamicsFunc = kite->getNumericDynamics();
-    SX X = kite->getSymbolicState();
-    SX U = kite->getSymbolicControl();
-    SX P = kite->getSymbolicParameters();
+    Function DynamicsFunc = kite.getNumericDynamics();
+    SX X = kite.getSymbolicState();
+    SX U = kite.getSymbolicControl();
+    SX P = kite.getSymbolicParameters();
 
     /** state bounds */
     DM LBX = DM::vertcat({2.0, -DM::inf(1), -DM::inf(1), -4 * M_PI, -4 * M_PI, -4 * M_PI, -DM::inf(1), -DM::inf(1), -DM::inf(1),
@@ -82,7 +85,7 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     DM UBU = DM::vec(id_control);
 
     /** parameter bounds */
-    YAML::Node config = YAML::LoadFile("umx_radian3.yaml");
+    YAML::Node config = YAML::LoadFile("umx_radian.yaml");
     double CL0 = config["aerodynamic"]["CL0"].as<double>();
     double CLa_tot = config["aerodynamic"]["CLa_total"].as<double>();
 
@@ -120,7 +123,7 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     LBP = -DM::inf(21);
     UBP = DM::inf(21);
 
-    /*
+
     LBP[0] = REF_P[0] -  0.1 * fabs(REF_P[0]); UBP[0] = REF_P[0] +  0.1 * fabs(REF_P[0]); // CL0
     LBP[1] = REF_P[1] - 0.05 * fabs(REF_P[1]); UBP[1] = REF_P[1] +  0.1 * fabs(REF_P[1]); // CLa
     LBP[2] = REF_P[2] -  0.1 * fabs(REF_P[2]); UBP[2] = REF_P[2] + 0.25 * fabs(REF_P[2]); // CD0
@@ -143,7 +146,7 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     LBP[18] = REF_P[18] -  0.5 * fabs(REF_P[18]); UBP[18] = REF_P[18] +  0.5 * fabs(REF_P[18]); // Cmde
     LBP[19] = REF_P[19] -  0.5 * fabs(REF_P[19]); UBP[19] = REF_P[19] +  0.5 * fabs(REF_P[19]); // Cndr
     LBP[20] = REF_P[20] -  0.5 * fabs(REF_P[20]); UBP[20] = REF_P[20] +  0.5 * fabs(REF_P[20]); // Cldr
-    */
+
     // LBP[21] = 2.65;    UBP[21] = 2.75;   // tether length
     // LBP[22] = 150.0;  UBP[22] = 150.0;  // Ks
     // LBP[23] = 0.0;    UBP[23] = 10;   // Kd
@@ -153,12 +156,12 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     std::cout << "OK so far \n";
 
     /** ----------------------------------------------------------------------------------*/
-    const int num_segments = 2;
-    const int poly_order   = 30;
+    const int num_segments = 10;
+    const int poly_order   = 20;
     const int dimx         = 13;
     const int dimu         = 3;
     const int dimp         = 21;
-    const double tf        = 3.0;
+    const double tf        = 5.0;
 
     Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
     SX diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
@@ -187,26 +190,26 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     ubx = SX::vertcat({ubx, UBP});
 
 
-    DM Q  = SX::diag(SX({1e3, 1e2, 1e2,  1e2, 1e2, 1e2,  1e1, 1e1, 1e1,  1e1, 1e1, 1e1, 1e1})); //good one as well
+    DM Q  = SX::diag(SX({1e3, 1e2, 1e2,  1e2, 1e2, 1e2,  1e1, 1e1, 1e2,  1e2, 1e2, 1e2, 1e2})); //good one as well
     //DM Q = 1e1 * DM::eye(13);
     double alpha = 100.0;
 
 
     SX fitting_error = 0;
-    SX varx_ = SX::reshape(varx, 13, DATA_POINTS);
+    SX varx_ = SX::reshape(varx, state_size, DATA_POINTS);
     for (uint j = 0; j < DATA_POINTS; ++j)
     {
         SX measurement = id_data(Slice(0, id_data.size1()), j);
         SX error = measurement - varx_(Slice(0, varx_.size1()), varx_.size2() - j - 1);
-        fitting_error = fitting_error + (1 / DATA_POINTS) * SX::sumRows( SX::mtimes(Q, pow(error, 2)) );
+        fitting_error += static_cast<double>(1.0 / DATA_POINTS) * SX::sumRows( SX::mtimes(Q, pow(error, 2)) );
     }
 
     /** add regularisation */
-    fitting_error = fitting_error + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
+    // fitting_error = fitting_error + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
 
     /** alternative approximation */
-    SX x = SX::sym("x",13);
-    SX y = SX::sym("y",13);
+    SX x = SX::sym("x", state_size);
+    SX y = SX::sym("y", state_size);
     SX cost_function = SX::sumRows( SX::mtimes(Q, pow(x - y, 2)) );
     Function IdCost = Function("IdCost",{x,y}, {cost_function});
     SX fitting_error2 = spectral.CollocateIdCost(IdCost, id_data, 0, tf);
@@ -229,6 +232,8 @@ BOOST_AUTO_TEST_CASE( first_id_test )
 
     Function NLP_Solver = nlpsol("solver", "ipopt", NLP, OPTS);
 
+    std::cout << "Ok here as well \n";
+
     /** set default args */
     ARG["lbx"] = lbx;
     ARG["ubx"] = ubx;
@@ -242,11 +247,36 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     props["R"] = casadi::DM::diag(casadi::DM({1/0.15, 1/0.2618, 1/0.2618}));
     PSODESolver<poly_order,num_segments,dimx,dimu>ps_solver(ode, tf, props);
 
-    DM x0 = id_data(Slice(0, id_data.size1()), 0);
-    DMDict solution = ps_solver.solve_trajectory(x0, LBU, true);
+
+    //here put actual numbers every time?
+    //DM x0 = id_data(Slice(0, id_data.size1()), 0);
+    DM init_state = id_data(Slice(0, id_data.size1()), 0);
+    DM init_control = DM({0.1, 0.0, 0.0});
+    init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
+
+    DMDict solution = ps_solver.solve_trajectory(init_state, init_control, true);
     DM feasible_state = solution.at("x");
     //DM feasible_state = DM::reshape(id_data, 13 * (num_segments * poly_order + 1), 1);
     //DM feasible_state = DM::repmat(id_data(Slice(0, id_data.size1()), 0), (num_segments * poly_order + 1), 1);
+
+    std::ofstream trajectory_file("integrated_trajectory.txt", std::ios::out);
+
+    if(!trajectory_file.fail())
+    {
+        for (int i = 0; i < varx.size1(); i = i + 13)
+        {
+            std::vector<double> tmp = feasible_state(Slice(i, i + 13),0).nonzeros();
+            for (uint j = 0; j < tmp.size(); j++)
+            {
+                trajectory_file << tmp[j] << " ";
+            }
+            trajectory_file << "\n";
+        }
+    }
+    trajectory_file.close();
+
+    std::cout << "Initial guess computed. \n";
+
     DM feasible_control = (UBU + LBU) / 2;
 
     //ARG["x0"] = DM::vertcat(DMVector{feasible_state, feasible_control, REF_P});
@@ -256,8 +286,8 @@ BOOST_AUTO_TEST_CASE( first_id_test )
 
     int idx_in = num_segments * poly_order * dimx;
     int idx_out = idx_in + dimx;
-    ARG["lbx"](Slice(idx_in, idx_out), 0) = x0;
-    ARG["ubx"](Slice(idx_in, idx_out), 0) = x0;
+    ARG["lbx"](Slice(idx_in, idx_out), 0) = init_state;
+    ARG["ubx"](Slice(idx_in, idx_out), 0) = init_state;
 
     DMDict res = NLP_Solver(ARG);
     DM result = res.at("x");
@@ -267,21 +297,21 @@ BOOST_AUTO_TEST_CASE( first_id_test )
 
     DM trajectory = result(Slice(0, varx.size1()));
     //DM trajectory = DM::reshape(traj, DATA_POINTS, dimx );
-    std::ofstream trajectory_file("estimated_trajectory.txt", std::ios::out);
+    std::ofstream est_trajectory_file("estimated_trajectory.txt", std::ios::out);
 
-    if(!trajectory_file.fail())
+    if(!est_trajectory_file.fail())
     {
         for (int i = 0; i < trajectory.size1(); i = i + dimx)
         {
             std::vector<double> tmp = trajectory(Slice(i, i + dimx),0).nonzeros();
             for (uint j = 0; j < tmp.size(); j++)
             {
-                trajectory_file << tmp[j] << " ";
+                est_trajectory_file << tmp[j] << " ";
             }
-            trajectory_file << "\n";
+            est_trajectory_file << "\n";
         }
     }
-    trajectory_file.close();
+    est_trajectory_file.close();
 
     /** update parameter file */
     config["aerodynamic"]["CL0"] = new_params_vec[0];

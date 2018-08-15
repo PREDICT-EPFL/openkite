@@ -11,7 +11,7 @@ BOOST_AUTO_TEST_SUITE( kite_model_suite_test )
 
 BOOST_AUTO_TEST_CASE( ode_solver_test )
 {
-    std::string kite_config_file = "umx_radian3.yaml";
+    std::string kite_config_file = "umx_radian.yaml";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_config_file);
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
@@ -24,8 +24,8 @@ BOOST_AUTO_TEST_CASE( ode_solver_test )
 
     /** compare three ode solvers */
     Dict opts;
-    opts["tf"]         = 1.0;
-    opts["poly_order"] = 21;
+    opts["tf"]         = 5.0;
+    opts["poly_order"] = 41;
     opts["tol"]        = 1e-4;
     opts["method"]     = IntType::RK4;
     ODESolver rk4_solver(ode, opts);
@@ -42,12 +42,12 @@ BOOST_AUTO_TEST_CASE( ode_solver_test )
 
     KiteDynamics kite2(kite_props, algo_props);
     Function ode2 = kite.getNumericDynamics();
-    double tf = 1.0;
+    double tf = 7.0;
     casadi::DMDict props;
     props["scale"] = 0;
     props["P"] = casadi::DM::diag(casadi::DM({0.1, 1/3.0, 1/3.0, 1/2.0, 1/5.0, 1/2.0, 1/3.0, 1/3.0, 1/3.0, 1.0, 1.0, 1.0, 1.0}));
     props["R"] = casadi::DM::diag(casadi::DM({1/0.15, 1/0.2618, 1/0.2618}));
-    PSODESolver<10,4,13,3>ps_solver(ode, tf, props);
+    PSODESolver<10,40,13,3>ps_solver(ode, tf, props);
 
     /** solve a problem */
     DM rk4_sol, cheb_sol, cv_sol, ps_sol;
@@ -55,16 +55,16 @@ BOOST_AUTO_TEST_CASE( ode_solver_test )
     //                          -0.229383, -0.0500282, -0.746832, 0.189409, -0.836349, -0.48178, 0.180367});
     //DM control = DM::vertcat({0.3, kmath::deg2rad(5), -kmath::deg2rad(2)});
 
-    DM init_state = DM::vertcat({7.2547334e+00, -5.9953832e-01, 1.5621571e+00, 6.4458230e-01, -1.9436366e+00,
-                                 -1.9995872e+00, 1.6915701e+00, -2.0761443e+00, -3.6169709e-01, 4.0336430e-01, 1.5472226e-01, -3.7687924e-01, -8.1934426e-01});
-    DM control = DM::vertcat({0.15, 0.0, 0.0});
+    DM init_state = DM::vertcat({6.1977743e+00,  -2.8407148e-02,   9.1815942e-01,   2.9763089e-01,  -2.2052198e+00,  -1.4827499e-01,
+                                 -4.1624807e-01, -2.2601052e+00,   1.2903439e+00,   3.5646195e-02,  -6.9986094e-02,   8.2660637e-01,   5.5727089e-01});
+    DM control = DM::vertcat({0.1, 0.0, 0.0});
 
     std::chrono::time_point<std::chrono::system_clock> start = kite_utils::get_time();
 
     rk4_sol  = rk4_solver.solve(init_state, control, tf);
     std::chrono::time_point<std::chrono::system_clock> rk4_stop = kite_utils::get_time();
 
-    cv_sol   = cvodes_solver.solve(init_state, control, tf);
+    //cv_sol   = cvodes_solver.solve(init_state, control, tf);
     std::chrono::time_point<std::chrono::system_clock> cv_stop = kite_utils::get_time();
 
     cheb_sol = chebychev_solver.solve(init_state, control, tf);
@@ -81,8 +81,8 @@ BOOST_AUTO_TEST_CASE( ode_solver_test )
 
     std::cout << "RK4 solve time: " << std::setprecision(6)
               << static_cast<double>(rk4_duration.count()) * 1e-6 << " [seconds]" << "\n";
-    std::cout << "CVODES solve time: " << std::setprecision(6)
-              << static_cast<double>(cv_duration.count()) * 1e-6 << " [seconds]" << "\n";
+    //std::cout << "CVODES solve time: " << std::setprecision(6)
+    //          << static_cast<double>(cv_duration.count()) * 1e-6 << " [seconds]" << "\n";
     std::cout << "CHEB solve time: " << std::setprecision(6)
               << static_cast<double>(cheb_duration.count()) * 1e-6 << " [seconds]" << "\n";
     std::cout << "PS solve time: " << std::setprecision(6)
@@ -93,7 +93,7 @@ BOOST_AUTO_TEST_CASE( ode_solver_test )
     std::cout << "CHEB: " <<  cheb_sol << "\n";
     std::cout << "PS:" << ps_sol(Slice(0, 13)) << "\n";
 
-    std::ofstream trajectory_file("estimated_trajectory.txt", std::ios::out);
+    std::ofstream trajectory_file("integrated_trajectory.txt", std::ios::out);
 
     if(!trajectory_file.fail())
     {

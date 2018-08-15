@@ -74,6 +74,7 @@ public:
 
 private:
     casadi::SX G;
+    casadi::SX opt_var;
     casadi::SXDict   NLP;
     casadi::Dict     OPTS;
     casadi::DMDict   ARG;
@@ -121,7 +122,7 @@ PSODESolver<PolyOrder, NumSegments, NX, NU>::PSODESolver(casadi::Function ODE, c
     casadi::SX varx = spectral.VarX();
     casadi::SX varu = spectral.VarU();
 
-    casadi::SX opt_var = casadi::SX::vertcat(casadi::SXVector{varx, varu});
+    opt_var = casadi::SX::vertcat(casadi::SXVector{varx, varu});
 
     casadi::SX lbg = casadi::SX::zeros(G.size());
     casadi::SX ubg = casadi::SX::zeros(G.size());
@@ -143,15 +144,18 @@ PSODESolver<PolyOrder, NumSegments, NX, NU>::PSODESolver(casadi::Function ODE, c
 
     /** formulate NLP */
     NLP["x"] = opt_var;
-    NLP["f"] = 0;
+    NLP["f"] = 1e-3 * casadi::SX::dot(G,G);
     NLP["g"] = G;
 
     OPTS["ipopt.linear_solver"]  = "ma97";
-    OPTS["ipopt.print_level"]    = 0;
-    OPTS["ipopt.tol"]            = 1e-8;
-    OPTS["ipopt.acceptable_tol"] = 1e-8;
-    //OPTS["ipopt.max_iter"]       = 40;
+    OPTS["ipopt.print_level"]    = 5;
+    OPTS["ipopt.tol"]            = 1e-4;
+    OPTS["ipopt.acceptable_tol"] = 1e-4;
+    OPTS["ipopt.max_iter"]       = 3000;
+    OPTS["ipopt.hessian_approximation"] = "limited-memory";
     NLP_Solver = nlpsol("solver", "ipopt", NLP, OPTS);
+
+    std::cout << "problem set \n";
 
     /** set default args */
     ARG["lbx"] = lbx;
@@ -164,9 +168,6 @@ PSODESolver<PolyOrder, NumSegments, NX, NU>::PSODESolver(casadi::Function ODE, c
 
     ARG["x0"] = casadi::DM::vertcat(casadi::DMVector{casadi::DM::repmat(feasible_state, (NumSegments * PolyOrder + 1), 1),
                                     casadi::DM::repmat(feasible_control, (NumSegments * PolyOrder + 1), 1)});
-
-    //casadi::SX SymJacob = casadi::SX::jacobian(G, opt_var);
-    //Jacobian = casadi::Function("jacobian", {SymJacob}, {opt_var});
 }
 
 template<int PolyOrder, int NumSegments, int NX, int NU>
@@ -264,7 +265,7 @@ casadi::DMDict PSODESolver<PolyOrder, NumSegments, NX, NU>::solve_trajectory(con
 
     if (scale)
     {
-        casadi::DM U_ = casadi::DM::reshape(U, NX, (NumSegments * PolyOrder + 1) * NU);
+        casadi::DM U_ = casadi::DM::reshape(U, NU, (NumSegments * PolyOrder + 1));
         U_ = casadi::DM::mtimes(R, U_);
 
         ARG["x0"](x_var, 0) = casadi::DM::repmat(casadi::DM::mtimes(P, X0), (NumSegments * PolyOrder + 1), 1);

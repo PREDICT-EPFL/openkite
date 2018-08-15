@@ -197,8 +197,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX V = SX::norm_2(v);
     SX V2 = SX::dot(v, v);
 
-    SX ss = asin(v[1] / V);       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
-    SX aoa = atan2(v[2] , v[0]);  /** angle of attack definition [rad] (v(2)/L2(v)) **/
+    SX ss = asin(v[1] / (V + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
+    SX aoa = atan2(v[2] , (v[0] + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX dyn_press = 0.5 * ro * V2;         /** dynamic pressure **/
 
     SX CD = CD0_tot + pow(CL0 + CLa_tot * aoa, 2) / (pi * e_o * AR); /** total drag coefficient **/
