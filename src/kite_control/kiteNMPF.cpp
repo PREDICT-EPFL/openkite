@@ -31,7 +31,7 @@ KiteNMPF::KiteNMPF(std::shared_ptr<SimpleKinematicKite> _Kite, const Function &_
 
     Q  =  0.5 * SX::diag(SX::vertcat({1e3, 1e3}));
     R  =  SX::diag(SX::vertcat({1e-3, 1e-1}));
-    W  =  1e-1;
+    W  =  20 * 1e-1;
 
     Scale_X = DM::eye(5); invSX = DM::eye(5);
     Scale_U = DM::eye(2);  invSU = DM::eye(2);
@@ -58,9 +58,6 @@ void KiteNMPF::createNLP()
     int n = 5;
     int m = 2;
 
-    /** Order of polynomial interpolation */
-    int N = NUM_SHOOTING_INTERVALS;
-
     /** define augmented dynamics of path parameter */
     SX V = SX::sym("V", 2);
     SX Uv = SX::sym("Uv");
@@ -82,18 +79,22 @@ void KiteNMPF::createNLP()
     DynamicsFunc = aug_dynamo;
 
     /** ----------------------------------------------------------------------------------*/
-    const int num_segments = 1;
-    const int poly_order   = 9;
+    const int num_segments = 4;
+    const int poly_order   = 4;
     const int dimx         = 5;
     const int dimu         = 2;
     const int dimp         = 0;
+
+    /** Order of polynomial interpolation */
+    NUM_SHOOTING_INTERVALS = num_segments * poly_order;
+    int N = NUM_SHOOTING_INTERVALS;
 
     Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
     SX diff_constr;
 
     SX x = SX::sym("x", dimx);
     SX u = SX::sym("u", dimu);
-    double tf = 1.0;
+    double tf = 2.5;
 
     if(scale)
     {
@@ -157,15 +158,15 @@ void KiteNMPF::createNLP()
 
     /** set inequality (box) constraints */
     /** state */
-    SX lbx = SX::repmat(SX::mtimes(Scale_X, LBX), poly_order + 1, 1);
-    SX ubx = SX::repmat(SX::mtimes(Scale_X, UBX), poly_order + 1, 1);
+    SX lbx = SX::repmat(SX::mtimes(Scale_X, LBX), poly_order * num_segments + 1, 1);
+    SX ubx = SX::repmat(SX::mtimes(Scale_X, UBX), poly_order * num_segments + 1, 1);
 
     /** control */
     //lbx = SX::vertcat( {lbx, SX::repmat(SX::mtimes(Scale_U, LBU), poly_order, 1)} );
     //ubx = SX::vertcat( {ubx, SX::repmat(SX::mtimes(Scale_U, UBU), poly_order, 1)} );
 
-    lbx = SX::vertcat( {lbx, SX::repmat(SX::mtimes(Scale_U, LBU), poly_order + 1, 1)} );
-    ubx = SX::vertcat( {ubx, SX::repmat(SX::mtimes(Scale_U, UBU), poly_order + 1, 1)} );
+    lbx = SX::vertcat( {lbx, SX::repmat(SX::mtimes(Scale_U, LBU), poly_order * num_segments + 1, 1)} );
+    ubx = SX::vertcat( {ubx, SX::repmat(SX::mtimes(Scale_U, UBU), poly_order * num_segments + 1, 1)} );
 
     SX diff_constr_jacobian = SX::jacobian(diff_constr, opt_var);
     /** Augmented Jacobian */
@@ -193,8 +194,8 @@ void KiteNMPF::createNLP()
     DM feasible_state = DM::mtimes(Scale_X, (UBX + LBX) / 2);
     DM feasible_control = DM::mtimes(Scale_U, (UBU + LBU) / 2);
 
-    ARG["x0"] = DM::vertcat(DMVector{DM::repmat(feasible_state, poly_order + 1, 1),
-                                     DM::repmat(feasible_control, poly_order + 1, 1)});
+    ARG["x0"] = DM::vertcat(DMVector{DM::repmat(feasible_state, poly_order * num_segments + 1, 1),
+                                     DM::repmat(feasible_control, poly_order * num_segments + 1, 1)});
 
 }
 

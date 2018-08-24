@@ -660,6 +660,8 @@ SimpleKinematicKite::SimpleKinematicKite(const AlgorithmProperties &AlgoProps, c
 
     SX vw = SX::vertcat({ws,0,0});
     SX M = SX::diag(SX::vertcat({(1/L), (1/L * cos(theta))}));
+    /** try matrix definition with vertcat here instaed */
+
     SX R_GN = SX::zeros(3,3);
     R_GN(0,0) = -sin(theta) * cos(phi);  R_GN(0,1) = -sin(theta);  R_GN(0,2) = -cos(theta) * cos(phi);
     R_GN(1,0) = -sin(theta) * sin(phi);  R_GN(1,1) = cos(theta);   R_GN(1,2) = -cos(theta) * sin(phi);
