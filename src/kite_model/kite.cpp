@@ -266,6 +266,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 
     /** Total external forces devided by glider's mass (linear acceleration) */
     auto v_dot = (Faero_b + T_b + R_b)/Mass + G_b - SX::cross(w,v);
+    //auto v_dot = (Faero_b + T_b)/Mass + G_b - SX::cross(w,v);
 
     /** ------------------------- */
     /** Dynamic Equation: Moments */
@@ -299,7 +300,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     DM tether_arm = DM({rx, ry, rz});
     SX Mt = SX::cross(tether_arm, R_b);
 
-    auto w_dot = SX::mtimes( SX::inv(J),  (Maero + Mt - SX::cross(w, SX::mtimes(J, w))) );
+    auto w_dot = SX::mtimes( SX::inv(J),  (Maero + Mt - SX::cross(w, SX::mtimes(J, w))) ); //with tether induced moment
+    //auto w_dot = SX::mtimes( SX::inv(J),  (Maero - SX::cross(w, SX::mtimes(J, w))) );
 
     /** ----------------------------- */
     /** Kinematic Equations: Position */

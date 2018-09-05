@@ -18,3 +18,6 @@ target_link_libraries(simulator kitemodel odesolver ${catkin_LIBRARIES})
 
 add_dependencies(simulator openkite_generate_messages_cpp)
 
+add_executable(homotopy_test homotopy_test.cpp)
+target_link_libraries(homotopy_test kiteNMPF kitemodel odesolver)
+
