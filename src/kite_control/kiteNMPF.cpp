@@ -29,9 +29,9 @@ KiteNMPF::KiteNMPF(std::shared_ptr<KiteDynamics> _Kite, const Function &_Path) :
     LBG = DEFAULT_LBG;
     UBG = DEFAULT_UBG;
 
-    Q  =  0.5 * SX::diag(SX({1e1, 1e1, 1e2}));
-    R  =  SX::diag(SX({1e-4, 1e-1, 1e-1, 1e-4}));
-    W  = 1e-1;
+    Q  =  1e2 * SX::diag(SX({1e1, 1e1, 1e2}));
+    R  =  SX::diag(SX({1e-4, 1e-1, 1e-1, 1e-3}));
+    W  = 1e-3;
 
     Scale_X = DM::eye(15); invSX = DM::eye(15);
     Scale_U = DM::eye(4);  invSU = DM::eye(4);
@@ -58,9 +58,6 @@ void KiteNMPF::createNLP()
     int n = 15;
     int m = 4;
 
-    /** Order of polynomial interpolation */
-    int N = NUM_SHOOTING_INTERVALS;
-
     /** define augmented dynamics of path parameter */
     SX V = SX::sym("V", 2);
     SX Uv = SX::sym("Uv");
@@ -82,11 +79,17 @@ void KiteNMPF::createNLP()
     DynamicsFunc = aug_dynamo;
 
     /** ----------------------------------------------------------------------------------*/
-    const int num_segments = 1;
-    const int poly_order   = 9;
+    const int num_segments = 2;
+    const int poly_order   = 5;
     const int dimx         = 15;
     const int dimu         = 4;
     const int dimp         = 0;
+
+    double tf = 1.0;
+
+    NUM_SHOOTING_INTERVALS = num_segments * poly_order;
+    /** Order of polynomial interpolation */
+    int N = NUM_SHOOTING_INTERVALS;
 
     Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
     SX diff_constr;
@@ -100,14 +103,14 @@ void KiteNMPF::createNLP()
         SODE = SX::mtimes(Scale_X, SODE);
         Function FunSODE = Function("scaled_ode", {x, u}, {SODE});
 
-        diff_constr = spectral.CollocateDynamics(FunSODE, 0, 1.0);
+        diff_constr = spectral.CollocateDynamics(FunSODE, 0, tf);
     }
     else
     {
-        diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, 1.0);
+        diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
     }
 
-    diff_constr = 0.1 * diff_constr;
+    diff_constr = diff_constr;
     //diff_constr = diff_constr(Slice(0, diff_constr.size1() - dimx));
 
     /** define an integral cost */
@@ -137,7 +140,7 @@ void KiteNMPF::createNLP()
 
     SX mayer     =  SX::sumRows( SX::mtimes(Q, pow(residual, 2)) );
     Function MayerTerm    = Function("Mayer",{x}, {mayer});
-    SX performance_idx = spectral.CollocateCost(MayerTerm, LagrangeTerm, 0, 1);
+    SX performance_idx = spectral.CollocateCost(MayerTerm, LagrangeTerm, 0.0, tf);
 
     SX varx = spectral.VarX();
     SX varu = spectral.VarU();
@@ -153,15 +156,15 @@ void KiteNMPF::createNLP()
 
     /** set inequality (box) constraints */
     /** state */
-    SX lbx = SX::repmat(SX::mtimes(Scale_X, LBX), poly_order + 1, 1);
-    SX ubx = SX::repmat(SX::mtimes(Scale_X, UBX), poly_order + 1, 1);
+    SX lbx = SX::repmat(SX::mtimes(Scale_X, LBX), poly_order * num_segments + 1, 1);
+    SX ubx = SX::repmat(SX::mtimes(Scale_X, UBX), poly_order * num_segments + 1, 1);
 
     /** control */
     //lbx = SX::vertcat( {lbx, SX::repmat(SX::mtimes(Scale_U, LBU), poly_order, 1)} );
     //ubx = SX::vertcat( {ubx, SX::repmat(SX::mtimes(Scale_U, UBU), poly_order, 1)} );
 
-    lbx = SX::vertcat( {lbx, SX::repmat(SX::mtimes(Scale_U, LBU), poly_order + 1, 1)} );
-    ubx = SX::vertcat( {ubx, SX::repmat(SX::mtimes(Scale_U, UBU), poly_order + 1, 1)} );
+    lbx = SX::vertcat( {lbx, SX::repmat(SX::mtimes(Scale_U, LBU), poly_order * num_segments + 1, 1)} );
+    ubx = SX::vertcat( {ubx, SX::repmat(SX::mtimes(Scale_U, UBU), poly_order * num_segments + 1, 1)} );
 
     SX diff_constr_jacobian = SX::jacobian(diff_constr, opt_var);
     /** Augmented Jacobian */
@@ -189,127 +192,8 @@ void KiteNMPF::createNLP()
     DM feasible_state = DM::mtimes(Scale_X, (UBX + LBX) / 2);
     DM feasible_control = DM::mtimes(Scale_U, (UBU + LBU) / 2);
 
-    ARG["x0"] = DM::vertcat(DMVector{DM::repmat(feasible_state, poly_order + 1, 1),
-                                     DM::repmat(feasible_control, poly_order + 1, 1)});
-                                     //DM::repmat(feasible_control, poly_order, 1)});
-
-    /** ----------------------------------------------------------------------------------*/
-
-    /** NLP formulation */
-    /** define optimisation variables */
-    /** SX z = SX::sym("z", n, N+1);
-    SX z_u = SX::sym("z_u", m, N); */
-
-    /** allocate vectors to store constraints */
-    /** SX vecx = {};
-    SX g = {}; */
-
-    /** state and control constraints */
-    /** SX lbx = {};
-    SX ubx = {}; */
-
-    /** nonlinear state constraints */
-    /** SX lbg = {};
-    SX ubg = {}; */
-
-    /** objective function */
-    /** SX objective = 0; */
-
-    /** Geometric path definition */
-    /** SX theta = SX::sym("theta"); */
-
-    /**  NLP formulation */
-    /** Lagrangian term */
-    /** SX pos = z(Slice(6,9), Slice(1, z.size2()-1));
-    pos = SX::vec(pos); */
-
-    /** path following error */
-    /** DM ScaleXYZ = Scale_X(Slice(6,9), Slice(6,9));
-    SX path_scaled = SX::mtimes(ScaleXYZ, SX::vertcat(PathFunc(SXVector{theta})));
-    Function PathFuncScaled = Function("Scaled_Path",{theta},{path_scaled}); */
-
-    /** @badcode: better DM to double conversion should exist */
-    /** double scale_th = Scale_X(13,13).nonzeros()[0];
-    SX path = kmath::mat_func( scale_th * z(13, Slice(1, z.size2()-1)), PathFuncScaled);
-    SX err = pos - path;
-    SX Qn = SX::kron(SX::eye(N-1), Q); */
-
-    /** reference velocity following */
-    /** SX err_v = z(14, Slice(1, z.size2()-1)).T() - SX::repmat(reference_velocity, N-1, 1);
-    SX Qw = W * SX::eye(N-1);
-
-    SX L = SX::sumRows( SX::mtimes(Qn, pow(err, 2)) ) + SX::sumRows( SX::mtimes(Qw, pow(err_v, 2)) ); */
-
-    /** Mayer term */
-    /** path = SX::vertcat(PathFuncScaled(SXVector{scale_th * z(13,0)}));
-    SX err_n = z(Slice(6, 9), 0) - path;
-    err_n = SX::vertcat( SXVector{err_n, z(14, 0) - reference_velocity});
-
-    SX T = SX::mtimes((10 * SX::diagcat( {Q, W}) ), pow(err_n, 2)); */
-
-    /** objective function */
-    /** objective = L + SX::sumRows(T);
-
-    CostFunction = Function("Cost", {z, z_u}, {objective});
-
-    /** set equality constraints */
-    /** differentiation matrix */
-    /** DM _x, _D;
-    std::pair<double, double> interval = std::make_pair<double, double>(0,1);
-    kmath::cheb(_x, _D, N, interval);
-    SX D = _D;
-    D(D.size1()-1, Slice(0, D.size2())) = SX::zeros(N+1);
-    D(D.size1() - 1, D.size2() - 1) = 1;
-    SX Dn = SX::kron(D, SX::eye(n));
-
-    SX iSx = SX::kron(SX::eye(N+1), invSX);
-    SX iSu = SX::kron(SX::eye(N), invSU);
-
-    SX F = kmath::mat_dynamics(SX::mtimes(invSX, z), SX::mtimes(invSU, z_u), aug_dynamo);
-    SX G = SX::mtimes(SX::mtimes(Dn, iSx), SX::vec(z)) - F;
-    G = G(Slice(0, N * n), 0);
-
-    DynamicConstraints = Function("lox",{z, z_u},{G});
-
-    lbg = SX::zeros(( N ) * n, 1);
-    ubg = SX::zeros(( N ) * n, 1);
-
-    /** set inequality (box) constraints */
-    /** state */
-    /** @todo: SCALE CONSTRAINTS */
-    /** lbx = SX::repmat(SX::mtimes(Scale_X, LBX), N + 1, 1);
-    ubx = SX::repmat(SX::mtimes(Scale_X, UBX), N + 1, 1);
-
-    /** control */
-     /** lbx = SX::vertcat( {lbx, SX::repmat(SX::mtimes(Scale_U, LBU), N, 1)} );
-    ubx = SX::vertcat( {ubx, SX::repmat(SX::mtimes(Scale_U, UBU), N, 1)} );
-
-    /** set decision variable */
-    /** vecx = SX::vertcat({SX::vec(z), SX::vec(z_u)});
-
-    /** formulate NLP */
-    /** NLP["x"] = vecx;
-    NLP["f"] = objective;
-    NLP["g"] = G;
-
-    OPTS["ipopt.linear_solver"]  = "ma97";
-    OPTS["ipopt.print_level"]    = 0;
-    OPTS["ipopt.tol"]            = 1e-5;
-    OPTS["ipopt.acceptable_tol"] = 1e-4;
-    //OPTS["ipopt.max_iter"]       = 15;
-    NLP_Solver = nlpsol("solver", "ipopt", NLP, OPTS);
-
-    /** set default args */
-    /** ARG["lbx"] = lbx;
-    ARG["ubx"] = ubx;
-    ARG["lbg"] = lbg;
-    ARG["ubg"] = ubg;
-
-    DM feasible_state = DM::mtimes(Scale_X, (UBX + LBX) / 2);
-    DM feasible_control = DM::mtimes(Scale_U, (UBU + LBU) / 2);
-
-    ARG["x0"] = DM::vertcat(DMVector{DM::repmat(feasible_state, N + 1, 1),
-                                     DM::repmat(feasible_control, N, 1)}); */
+    ARG["x0"] = DM::vertcat(DMVector{DM::repmat(feasible_state, poly_order * num_segments + 1, 1),
+                                     DM::repmat(feasible_control, poly_order * num_segments + 1, 1)});
 }
 
 void KiteNMPF::computeControl(const DM &_X0)

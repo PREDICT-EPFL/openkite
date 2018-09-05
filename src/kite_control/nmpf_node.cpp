@@ -28,11 +28,11 @@ KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh, const KiteProperties &k
 
     /** @badcode : parametrize path outside NMPF node  constructor*/
     SX x = SX::sym("x");
-    double radius   = 2.72;
+    double radius   = 2.65;
     double altitude = 0.00;
     SX Path = SX::vertcat(SXVector{radius * cos(x), radius * sin(x), altitude});
     /** rotate path */
-    SX q_rot = SX::vertcat({cos(0 / 24), 0, sin(0 / 24), 0});
+    SX q_rot = SX::vertcat({cos(M_PI / 8), 0, sin(M_PI / 8), 0});
     SX q_rot_inv = kmath::quat_inverse(q_rot);
     SX qP_tmp = kmath::quat_multiply(q_rot_inv, SX::vertcat({0, Path}));
     SX qP_q = kmath::quat_multiply(qP_tmp, q_rot);
@@ -43,8 +43,8 @@ KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh, const KiteProperties &k
     nh = std::make_shared<ros::NodeHandle>(_nh);
     /** set control constraints */
     double angle_sat = kmath::deg2rad(7.0);
-    DM lbu = DM::vertcat({0.1, -0.03, -angle_sat, -5});
-    DM ubu = DM::vertcat({0.15, 0.03, angle_sat, 5});
+    DM lbu = DM::vertcat({0.1, -angle_sat, -angle_sat, -5});
+    DM ubu = DM::vertcat({0.15, angle_sat, angle_sat, 5});
 
     /** scaling matrices */
     DM ScaleX  = DM::diag(DM({0.1, 1/3.0, 1/3.0, 1/2.0, 1/5.0, 1/2.0, 1/3.0, 1/3.0, 1/3.0, 1.0, 1.0, 1.0, 1.0, 1/6.28, 1/6.28}));
@@ -72,7 +72,7 @@ KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh, const KiteProperties &k
     controller->createNLP();
 
     /** create solver for delay compensation */
-    nh->param<double>("delay", transport_delay, 0.2);
+    nh->param<double>("delay", transport_delay, 0.1);
 
     Dict opts;
     opts["tf"]         = transport_delay;
@@ -252,7 +252,7 @@ int main(int argc, char **argv)
 
     /** create a kite object */
     std::string kite_params_file;
-    n.param<std::string>("kite_params", kite_params_file, "umx_radian.yaml");
+    n.param<std::string>("kite_params", kite_params_file, "umx_radian2.yaml");
     std::cout << kite_params_file << "\n";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
     AlgorithmProperties algo_props;
