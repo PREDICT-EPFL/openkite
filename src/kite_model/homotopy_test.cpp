@@ -34,21 +34,21 @@ int main(void)
     /** create the kite model */
     std::string kite_params_file = "umx_radian.yaml";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
+    AlgorithmProperties algo_props;
+    algo_props.Integrator = CVODES;
+    algo_props.sampling_time = 0.02;
+
+    /** kite model */
+    KiteDynamics kite(kite_props, algo_props);
 
     /** no tether */
     kite_props.Tether.Ks = 0.0;
     kite_props.Tether.Kd = 0.0;
 
-    AlgorithmProperties algo_props;
-    algo_props.Integrator = CVODES;
-    algo_props.sampling_time = 0.02;
-    KiteDynamics kite_int(kite_props, algo_props); //integration model
-    casadi::Function ode = kite_int.getNumericDynamics();
+    KiteDynamics aircraft(kite_props, algo_props); // "simple" model
 
     /** get dynamics function and state Jacobian */
-    casadi::Function DynamicsFunc = kite_int.getNumericDynamics();
-    casadi::SX X = kite_int.getSymbolicState();
-    casadi::SX U = kite_int.getSymbolicControl();
+    casadi::Function DynamicsFunc = aircraft.getNumericDynamics();
 
     /** state bounds */
     casadi::DM INF = casadi::DM::inf(1);
@@ -124,8 +124,88 @@ int main(void)
     ARG["lbx"](casadi::Slice(idx_in, idx_out), 0) = init_state;
     ARG["ubx"](casadi::Slice(idx_in, idx_out), 0) = init_state;
 
-    casadi::DMDict res = NLP_Solver(ARG);
-    casadi::DM result = res.at("x");
+
+    /** get a initial solution for the "simple" model */
+    casadi::DMDict solution = NLP_Solver(ARG);
+
+    casadi::DM x0     = solution.at("x");
+    casadi::DM lam_g0 = solution.at("lam_g");
+    casadi::DM lam_x0 = solution.at("lam_x");
+
+
+    /** ---------------------------------------------- */
+    /** appproximate the stiff model */
+    casadi::Function KiteDynamicsFunc = kite.getNumericDynamics();
+    casadi::SX kite_constr = spectral.CollocateDynamics(KiteDynamicsFunc, 0, tf);
+    kite_constr = kite_constr(casadi::Slice(0, num_segments * poly_order * dimx));
+
+    /** create the homotopy equations */
+    casadi::SX lambda = casadi::SX::sym("lambda"); // homotopy paramter
+    casadi::SX homotopy = (lambda) * kite_constr + (1 - lambda) * diff_constr;
+
+    /** adjoin the homotopy parameter to the optimization variable and create new NLP */
+    opt_var = casadi::SX::vertcat(casadi::SXVector{opt_var, lambda});
+    lbx = casadi::SX::vertcat({lbx, 0});
+    ubx = casadi::SX::vertcat({ubx, 0});
+
+    NLP["x"] = opt_var;
+    NLP["f"] = 0;
+    NLP["g"] = homotopy;
+
+    ARG["lbx"] = lbx;
+    ARG["ubx"] = ubx;
+    ARG["lbg"] = lbg;
+    ARG["ubg"] = ubg;
+
+    ARG["lbx"](casadi::Slice(idx_in, idx_out), 0) = init_state;
+    ARG["ubx"](casadi::Slice(idx_in, idx_out), 0) = init_state;
+
+    ARG["x0"]     = casadi::DM::vertcat({x0, 0.05});
+    ARG["lam_g0"] = lam_g0;
+    ARG["lam_x0"] = casadi::DM::vertcat({lam_x0, 0});
+
+    OPTS["ipopt.tol"]            = 1e-6;
+    OPTS["ipopt.acceptable_tol"] = 1e-6;
+
+    casadi::Function HomotopyCorrector = casadi::nlpsol("solver", "ipopt", NLP, OPTS);
+
+    /** gradually increase homotopy parameter and solve nonlinear problem */
+    for(double lambda_val = 0.0; lambda_val <= 1.01; lambda_val = lambda_val + 0.01)
+    {
+        /** update homotopy parameter */
+        ARG["lbx"](lbx.size1() - 1, 0) = lambda_val;
+        ARG["ubx"](ubx.size1() - 1, 0) = lambda_val;
+
+        std::cout << "------------------------------------------------ \n";
+        std::cout << "LAMBDA: " << lambda_val << "\n";
+        std::cout << "------------------------------------------------ \n";
+
+        /** solve homotopy equations */
+        solution = HomotopyCorrector(ARG);
+
+        /** update warm starting parameters */
+        ARG["x0"]     = solution.at("x");
+        ARG["lam_g0"] = solution.at("lam_g");
+        ARG["lam_x0"] = solution.at("lam_x");
+    }
+
+    casadi::DM result = solution.at("x");
+    casadi::DM trajectory = result(casadi::Slice(0, varx.size1()));
+    std::ofstream est_trajectory_file("estimated_trajectory.txt", std::ios::out);
+
+    if(!est_trajectory_file.fail())
+    {
+        for (int i = 0; i < trajectory.size1(); i = i + dimx)
+        {
+            std::vector<double> tmp = trajectory(casadi::Slice(i, i + dimx),0).nonzeros();
+            for (uint j = 0; j < tmp.size(); j++)
+            {
+                est_trajectory_file << tmp[j] << " ";
+            }
+            est_trajectory_file << "\n";
+        }
+    }
+    est_trajectory_file.close();
 
     return 0;
 }
