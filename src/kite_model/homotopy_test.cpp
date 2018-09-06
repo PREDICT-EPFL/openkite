@@ -2,12 +2,57 @@
 #include <fstream>
 #include "pseudospectral/chebyshev.hpp"
 #include "kiteNMPF.h"
+#include "sys/stat.h"
+
+inline bool file_exists(const std::string &filename)
+{
+    struct stat buffer;
+    return (stat (filename.c_str(), &buffer) == 0);
+}
+
+casadi::DM read_from_file(const std::string &filename)
+{
+    std::ifstream file(filename, std::ios::in);
+    std::vector<double> vec;
+    if(!file.fail())
+    {
+        double x;
+        while(file >> x)
+        {
+            vec.push_back(x);
+        }
+        return casadi::DM({vec});
+    }
+    else
+    {
+        std::cout << "Could not open : " << filename << " data file \n";
+        file.clear();
+        return casadi::DM({});
+    }
+}
+
+void write_to_file(const std::string &filename, const casadi::DM &data)
+{
+    std::ofstream data_file(filename, std::ios::out);
+    std::vector<double> vec = data.nonzeros();
+
+    /** solution */
+    if(data_file.fail())
+    {
+        for(std::vector<double>::iterator it = vec.begin(); it != vec.end(); ++it)
+        {
+            data_file << (*it) << " ";
+        }
+        data_file << "\n";
+    }
+    data_file.close();
+}
 
 int main(void)
 {
     /** Load control signal */
     std::ifstream id_control_file("id_data_control.txt", std::ios::in);
-    const int DATA_POINTS = 101;
+    const int DATA_POINTS = 251;
     const int state_size   = 13;
     const int control_size = 3;
 
@@ -61,12 +106,12 @@ int main(void)
     casadi::DM UBU = casadi::DM::vec(id_control);
 
     /** ----------------------------------------------------------------------------------*/
-    const int num_segments = 25;
-    const int poly_order   = 4;
+    const int num_segments = 50;
+    const int poly_order   = 5;
     const int dimx         = 13;
     const int dimu         = 3;
     const int dimp         = 0;
-    const double tf        = 5.0;
+    const double tf        = 10.0;
 
     Chebyshev<casadi::SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
     casadi::SX diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
@@ -99,7 +144,7 @@ int main(void)
     NLP["g"] = diff_constr;
 
     OPTS["ipopt.linear_solver"]  = "ma97";
-    OPTS["ipopt.print_level"]    = 5;
+    OPTS["ipopt.print_level"]    = 1;
     OPTS["ipopt.tol"]            = 1e-4;
     OPTS["ipopt.acceptable_tol"] = 1e-4;
     OPTS["ipopt.warm_start_init_point"] = "yes";
@@ -117,7 +162,25 @@ int main(void)
                                          -4.1624807e-01, -2.2601052e+00,   1.2903439e+00,   3.5646195e-02,  -6.9986094e-02,   8.2660637e-01,   5.5727089e-01});
     casadi::DM feasible_state = casadi::DM::repmat(init_state, (num_segments * poly_order + 1), 1);
 
-    ARG["x0"] = casadi::DM::vertcat(casadi::DMVector{feasible_state, feasible_control});
+    /** if the solutions available load them from file */
+    if(file_exists("solution_x0.txt"))
+    {
+        ARG["x0"] = read_from_file("solution_x0.txt");
+    }
+    else
+    {
+        ARG["x0"] = casadi::DM::vertcat(casadi::DMVector{feasible_state, feasible_control});
+    }
+
+    if(file_exists("solution_lam_g.txt"))
+    {
+        ARG["lam_g0"] = read_from_file("solution_lam_g.txt");
+    }
+
+    if(file_exists("solution_lam_x.txt"))
+    {
+        ARG["lam_x0"] = read_from_file("solution_lam_x.txt");
+    }
 
     int idx_in = num_segments * poly_order * dimx;
     int idx_out = idx_in + dimx;
@@ -131,6 +194,17 @@ int main(void)
     casadi::DM x0     = solution.at("x");
     casadi::DM lam_g0 = solution.at("lam_g");
     casadi::DM lam_x0 = solution.at("lam_x");
+
+    /** save the initial guess if optimal solution is found */
+    casadi::Dict stats = NLP_Solver.stats();
+    std::string solve_status = static_cast<std::string>(stats["return_status"]);
+    std::cout << stats << "\n";
+    if(solve_status.compare("Solve_Succeeded") == 0)
+    {
+        write_to_file("solution_x0.txt", x0);
+        write_to_file("solution_lam_g.txt", lam_g0);
+        write_to_file("solution_lam_x.txt", lam_x0);
+    }
 
 
     /** ---------------------------------------------- */
@@ -164,14 +238,22 @@ int main(void)
     ARG["lam_g0"] = lam_g0;
     ARG["lam_x0"] = casadi::DM::vertcat({lam_x0, 0});
 
-    OPTS["ipopt.tol"]            = 1e-6;
-    OPTS["ipopt.acceptable_tol"] = 1e-6;
+    OPTS["ipopt.tol"]            = 1e-4;
+    OPTS["ipopt.acceptable_tol"] = 1e-4;
 
     casadi::Function HomotopyCorrector = casadi::nlpsol("solver", "ipopt", NLP, OPTS);
 
     /** gradually increase homotopy parameter and solve nonlinear problem */
-    for(double lambda_val = 0.0; lambda_val <= 1.01; lambda_val = lambda_val + 0.01)
+    double lambda_val = 0.0;
+    double d_lambda_val = 0.00001;
+    while(lambda_val < 1.0)
     {
+        lambda_val += d_lambda_val;
+
+        /** round-off last lambda */
+        if(std::fabs(lambda_val - 1.0) < 0.006)
+            lambda_val = 1.0;
+
         /** update homotopy parameter */
         ARG["lbx"](lbx.size1() - 1, 0) = lambda_val;
         ARG["ubx"](ubx.size1() - 1, 0) = lambda_val;
@@ -187,6 +269,13 @@ int main(void)
         ARG["x0"]     = solution.at("x");
         ARG["lam_g0"] = solution.at("lam_g");
         ARG["lam_x0"] = solution.at("lam_x");
+
+        /** adjust step: heuristic */
+        stats = HomotopyCorrector.stats();
+        std::cout << stats << "\n";
+        int num_iter = static_cast<int>(stats["iter_count"]);
+        if((num_iter < 50) && (d_lambda_val < 0.01))
+            d_lambda_val *= 2;
     }
 
     casadi::DM result = solution.at("x");
