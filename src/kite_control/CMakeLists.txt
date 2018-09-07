@@ -10,7 +10,7 @@ add_executable(kite_control_test kite_control_test.cpp)
 target_link_libraries(kite_control_test kiteNMPF kiteEKF ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 add_executable(kite_identification_test kite_identification_test.cpp)
-target_link_libraries(kite_identification_test kiteNMPF ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
+target_link_libraries(kite_identification_test kiteNMPF)
 
 add_executable(nmpf_node nmpf_node.cpp nmpf_node.hpp)
 target_link_libraries(nmpf_node kiteNMPF odesolver ${catkin_LIBRARIES})

@@ -1,22 +1,17 @@
 #include "kiteNMPF.h"
 #include "integrator.h"
-
-#define  BOOST_TEST_TOOLS_UNDER_DEBUGGER
-#define BOOST_TEST_MODULE kite_identification_test
-#include <boost/test/included/unit_test.hpp>
 #include <fstream>
 #include "pseudospectral/chebyshev.hpp"
 
 using namespace casadi;
 
-BOOST_AUTO_TEST_SUITE( kite_identification_test )
 
-BOOST_AUTO_TEST_CASE( first_id_test )
+int main(void)
 {
     /** Load identification data */
     std::ifstream id_data_file("id_data_state.txt", std::ios::in);
     std::ifstream id_control_file("id_data_control.txt", std::ios::in);
-    const int DATA_POINTS = 201;
+    const int DATA_POINTS = 251;
     const int state_size   = 13;
     const int control_size = 3;
 
@@ -156,12 +151,12 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     std::cout << "OK so far \n";
 
     /** ----------------------------------------------------------------------------------*/
-    const int num_segments = 10;
-    const int poly_order   = 20;
+    const int num_segments = 50;
+    const int poly_order   = 5;
     const int dimx         = 13;
     const int dimu         = 3;
     const int dimp         = 21;
-    const double tf        = 5.0;
+    const double tf        = 10.0;
 
     Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
     SX diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
@@ -208,12 +203,14 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     // fitting_error = fitting_error + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
 
     /** alternative approximation */
+    /**
     SX x = SX::sym("x", state_size);
     SX y = SX::sym("y", state_size);
     SX cost_function = SX::sumRows( SX::mtimes(Q, pow(x - y, 2)) );
     Function IdCost = Function("IdCost",{x,y}, {cost_function});
     SX fitting_error2 = spectral.CollocateIdCost(IdCost, id_data, 0, tf);
     fitting_error2 = fitting_error2 + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
+    */
 
     /** formulate NLP */
     SXDict NLP;
@@ -240,27 +237,57 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     ARG["lbg"] = lbg;
     ARG["ubg"] = ubg;
 
-    /** provide initial guess from integrator */
-    casadi::DMDict props;
-    props["scale"] = 0;
-    props["P"] = casadi::DM::diag(casadi::DM({0.1, 1/3.0, 1/3.0, 1/2.0, 1/5.0, 1/2.0, 1/3.0, 1/3.0, 1/3.0, 1.0, 1.0, 1.0, 1.0}));
-    props["R"] = casadi::DM::diag(casadi::DM({1/0.15, 1/0.2618, 1/0.2618}));
-    PSODESolver<poly_order,num_segments,dimx,dimu>ps_solver(ode, tf, props);
-
-
-    //here put actual numbers every time?
-    //DM x0 = id_data(Slice(0, id_data.size1()), 0);
+    DMDict solution;
+    DM feasible_state;
     DM init_state = id_data(Slice(0, id_data.size1()), 0);
-    DM init_control = DM({0.1, 0.0, 0.0});
-    init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
 
-    DMDict solution = ps_solver.solve_trajectory(init_state, init_control, true);
-    DM feasible_state = solution.at("x");
-    //DM feasible_state = DM::reshape(id_data, 13 * (num_segments * poly_order + 1), 1);
-    //DM feasible_state = DM::repmat(id_data(Slice(0, id_data.size1()), 0), (num_segments * poly_order + 1), 1);
+    /** if the solutions available load them from file */
+    if(kite_utils::file_exists("id_x0.txt"))
+    {
+        DM sol_x  = kite_utils::read_from_file("id_x0.txt");
+        ARG["x0"] = DM::vertcat(DMVector{sol_x, REF_P});
+        feasible_state = sol_x;
 
+        std::cout << "Initial guess loaded from a file \n";
+    }
+    else
+    {
+        /** otherwise, provide initial guess from integrator */
+        casadi::DMDict props;
+        props["scale"] = 0;
+        props["P"] = casadi::DM::diag(casadi::DM({0.1, 1/3.0, 1/3.0, 1/2.0, 1/5.0, 1/2.0, 1/3.0, 1/3.0, 1/3.0, 1.0, 1.0, 1.0, 1.0}));
+        props["R"] = casadi::DM::diag(casadi::DM({1/0.15, 1/0.2618, 1/0.2618}));
+        PSODESolver<poly_order,num_segments,dimx,dimu>ps_solver(ode, tf, props);
+
+        DM init_control = DM({0.1, 0.0, 0.0});
+        init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
+        solution = ps_solver.solve_trajectory(init_state, init_control, true);
+        feasible_state = solution.at("x");
+        ARG["x0"] = casadi::DM::vertcat(casadi::DMVector{feasible_state, REF_P});
+    }
+
+    if(kite_utils::file_exists("id_lam_g.txt"))
+    {
+        ARG["lam_g0"] = kite_utils::read_from_file("id_lam_g.txt");
+    }
+    else
+    {
+        ARG["lam_g0"] = solution.at("lam_g");
+    }
+
+    if(kite_utils::file_exists("id_lam_x.txt"))
+    {
+        DM sol_lam_x = kite_utils::read_from_file("id_lam_x.txt");
+        ARG["lam_x0"] = DM::vertcat({sol_lam_x, DM::zeros(REF_P.size1())});
+    }
+    else
+    {
+        ARG["lam_x0"] = DM::vertcat({solution.at("lam_x"), DM::zeros(REF_P.size1())});
+    }
+
+
+    /** write to initial trajectory to a file */
     std::ofstream trajectory_file("integrated_trajectory.txt", std::ios::out);
-
     if(!trajectory_file.fail())
     {
         for (int i = 0; i < varx.size1(); i = i + 13)
@@ -275,24 +302,22 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     }
     trajectory_file.close();
 
-    std::cout << "Initial guess computed. \n";
-
-    DM feasible_control = (UBU + LBU) / 2;
-
-    //ARG["x0"] = DM::vertcat(DMVector{feasible_state, feasible_control, REF_P});
-    ARG["x0"] = DM::vertcat(DMVector{feasible_state, REF_P});
-    ARG["lam_g0"] = solution.at("lam_g");
-    ARG["lam_x0"] = DM::vertcat({solution.at("lam_x"), DM::zeros(REF_P.size1())});
 
     int idx_in = num_segments * poly_order * dimx;
     int idx_out = idx_in + dimx;
     ARG["lbx"](Slice(idx_in, idx_out), 0) = init_state;
     ARG["ubx"](Slice(idx_in, idx_out), 0) = init_state;
 
+    /** solve the identification problem */
     DMDict res = NLP_Solver(ARG);
     DM result = res.at("x");
+    DM lam_x  = res.at("lam_x");
 
     DM new_params = result(Slice(result.size1() - varp.size1(), result.size1()));
+    DM param_sens = lam_x(Slice(lam_x.size1() - varp.size1(), lam_x.size1()));
+
+    std::cout << "PARAMETER SENSITIVITIES: " << param_sens << "\n";
+
     std::vector<double> new_params_vec = new_params.nonzeros();
 
     DM trajectory = result(Slice(0, varx.size1()));
@@ -346,9 +371,4 @@ BOOST_AUTO_TEST_CASE( first_id_test )
 
     std::ofstream fout("umx_radian_id.yaml");
     fout << config;
-
-    BOOST_CHECK(true);
 }
-
-
-BOOST_AUTO_TEST_SUITE_END()

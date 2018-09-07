@@ -234,8 +234,15 @@ int main(void)
             d_lambda_val *= 2;
     }
 
-    casadi::DM result = solution.at("x");
-    casadi::DM trajectory = result(casadi::Slice(0, varx.size1()));
+    /** save solution to the files */
+    casadi::DM res_x     = solution.at("x");
+    casadi::DM res_lam_g = solution.at("lam_g");
+    casadi::DM res_lam_x = solution.at("lam_x");
+    kite_utils::write_to_file("id_x0.txt", res_x(casadi::Slice(0, res_x.size1() - 1))); // exclude homotopy parameter from the solution
+    kite_utils::write_to_file("id_lam_g.txt", res_lam_g);
+    kite_utils::write_to_file("id_lam_x.txt", res_lam_x(casadi::Slice(0, res_lam_x.size1() - 1)));
+
+    casadi::DM trajectory = res_x(casadi::Slice(0, varx.size1()));
     std::ofstream est_trajectory_file("estimated_trajectory.txt", std::ios::out);
 
     if(!est_trajectory_file.fail())
