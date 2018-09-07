@@ -37,7 +37,7 @@ void write_to_file(const std::string &filename, const casadi::DM &data)
     std::vector<double> vec = data.nonzeros();
 
     /** solution */
-    if(data_file.fail())
+    if(!data_file.fail())
     {
         for(std::vector<double>::iterator it = vec.begin(); it != vec.end(); ++it)
         {
