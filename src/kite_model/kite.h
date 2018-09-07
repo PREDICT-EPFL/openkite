@@ -5,6 +5,8 @@
 #include "yaml-cpp/yaml.h"
 #include "kitemath.h"
 #include <chrono>
+#include "sys/stat.h"
+#include <fstream>
 
 struct PlaneGeometry
 {
@@ -95,10 +97,21 @@ struct AlgorithmProperties
 
 namespace kite_utils
 {
+    /** load properties from a YAML file */
     KiteProperties LoadProperties(const std::string &filename);
 
+    /** architecture-dependend time stamping */
     typedef std::chrono::time_point<std::chrono::system_clock> time_point;
     time_point get_time();
+
+    /** write a DM vector to a file */
+    void write_to_file(const std::string &filename, const casadi::DM &data);
+
+    /** read a vector from a file */
+    casadi::DM read_from_file(const std::string &filename);
+
+    /** check if file exists */
+    bool file_exists(const std::string &filename);
 
 }
 

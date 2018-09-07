@@ -2,51 +2,7 @@
 #include <fstream>
 #include "pseudospectral/chebyshev.hpp"
 #include "kiteNMPF.h"
-#include "sys/stat.h"
 
-inline bool file_exists(const std::string &filename)
-{
-    struct stat buffer;
-    return (stat (filename.c_str(), &buffer) == 0);
-}
-
-casadi::DM read_from_file(const std::string &filename)
-{
-    std::ifstream file(filename, std::ios::in);
-    std::vector<double> vec;
-    if(!file.fail())
-    {
-        double x;
-        while(file >> x)
-        {
-            vec.push_back(x);
-        }
-        return casadi::DM({vec});
-    }
-    else
-    {
-        std::cout << "Could not open : " << filename << " data file \n";
-        file.clear();
-        return casadi::DM({});
-    }
-}
-
-void write_to_file(const std::string &filename, const casadi::DM &data)
-{
-    std::ofstream data_file(filename, std::ios::out);
-    std::vector<double> vec = data.nonzeros();
-
-    /** solution */
-    if(!data_file.fail())
-    {
-        for(std::vector<double>::iterator it = vec.begin(); it != vec.end(); ++it)
-        {
-            data_file << (*it) << " ";
-        }
-        data_file << "\n";
-    }
-    data_file.close();
-}
 
 int main(void)
 {
@@ -163,23 +119,23 @@ int main(void)
     casadi::DM feasible_state = casadi::DM::repmat(init_state, (num_segments * poly_order + 1), 1);
 
     /** if the solutions available load them from file */
-    if(file_exists("solution_x0.txt"))
+    if(kite_utils::file_exists("solution_x0.txt"))
     {
-        ARG["x0"] = read_from_file("solution_x0.txt");
+        ARG["x0"] = kite_utils::read_from_file("solution_x0.txt");
     }
     else
     {
         ARG["x0"] = casadi::DM::vertcat(casadi::DMVector{feasible_state, feasible_control});
     }
 
-    if(file_exists("solution_lam_g.txt"))
+    if(kite_utils::file_exists("solution_lam_g.txt"))
     {
-        ARG["lam_g0"] = read_from_file("solution_lam_g.txt");
+        ARG["lam_g0"] = kite_utils::read_from_file("solution_lam_g.txt");
     }
 
-    if(file_exists("solution_lam_x.txt"))
+    if(kite_utils::file_exists("solution_lam_x.txt"))
     {
-        ARG["lam_x0"] = read_from_file("solution_lam_x.txt");
+        ARG["lam_x0"] = kite_utils::read_from_file("solution_lam_x.txt");
     }
 
     int idx_in = num_segments * poly_order * dimx;
@@ -201,9 +157,9 @@ int main(void)
     std::cout << stats << "\n";
     if(solve_status.compare("Solve_Succeeded") == 0)
     {
-        write_to_file("solution_x0.txt", x0);
-        write_to_file("solution_lam_g.txt", lam_g0);
-        write_to_file("solution_lam_x.txt", lam_x0);
+        kite_utils::write_to_file("solution_x0.txt", x0);
+        kite_utils::write_to_file("solution_lam_g.txt", lam_g0);
+        kite_utils::write_to_file("solution_lam_x.txt", lam_x0);
     }
 
 

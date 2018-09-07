@@ -84,6 +84,50 @@ namespace kite_utils
         return std::chrono::high_resolution_clock::now();
         #endif
     }
+
+    bool file_exists(const std::string &filename)
+    {
+        struct stat buffer;
+        return (stat (filename.c_str(), &buffer) == 0);
+    }
+
+    DM read_from_file(const std::string &filename)
+    {
+        std::ifstream file(filename, std::ios::in);
+        std::vector<double> vec;
+        if(!file.fail())
+        {
+            double x;
+            while(file >> x)
+            {
+                vec.push_back(x);
+            }
+            return DM({vec});
+        }
+        else
+        {
+            std::cout << "Could not open : " << filename << " data file \n";
+            file.clear();
+            return DM({});
+        }
+    }
+
+    void write_to_file(const std::string &filename, const DM &data)
+    {
+        std::ofstream data_file(filename, std::ios::out);
+        std::vector<double> vec = data.nonzeros();
+
+        /** solution */
+        if(!data_file.fail())
+        {
+            for(std::vector<double>::iterator it = vec.begin(); it != vec.end(); ++it)
+            {
+                data_file << (*it) << " ";
+            }
+            data_file << "\n";
+        }
+        data_file.close();
+    }
 }
 
 
