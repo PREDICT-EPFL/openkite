@@ -21,3 +21,6 @@ add_dependencies(simulator openkite_generate_messages_cpp)
 add_executable(homotopy_test homotopy_test.cpp)
 target_link_libraries(homotopy_test kiteNMPF kitemodel odesolver)
 
+add_executable(psarc_test psarc_test.cpp)
+target_link_libraries(psarc_test kitemodel odesolver)
+

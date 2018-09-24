@@ -7,3 +7,4 @@ add_library(kitemath kitemath.cpp kitemath.h)
 target_link_libraries(kitemath ${CASADI_LIBRARIES} )
 
 add_subdirectory(pseudospectral)
+add_subdirectory(homotopy)
