@@ -5,13 +5,15 @@
 
 #include "ros/time.h"
 #include "eigen3/Eigen/Dense"
+#include "eigen3/Eigen/Sparse"
+#include "pseudospectral/chebyshev.hpp"
 
 using namespace casadi;
 
 int main()
 {
     //load config information
-    YAML::Node config = YAML::LoadFile("umx_radian3.yaml");
+    YAML::Node config = YAML::LoadFile("umx_radian.yaml");
     const std::string plane = config["name"].as<std::string>();
     const double aspect_ratio = config["geometry"]["AR"].as<double>();
 
@@ -124,6 +126,40 @@ int main()
     std::vector<SXElem> sold;
     sold.resize(static_cast<size_t>(sol.size()));
     Eigen::Map<Eigen::Matrix<SXElem, 2, 1>>(&sold[0], sol.size()) = sol;
+
+    std::cout << "|----------------------------SPARSITY EXPERIMENT--------------------------------------| \n";
+    /** create a sparse matrix */
+    Chebyshev<casadi::SX, 2, 2, 2, 1, 0>cheb;
+    casadi::DM Matrx = cheb.CompD();
+    std::cout << Matrx << "\n";
+
+    casadi::Sparsity SpA = Matrx.get_sparsity();
+    std::cout << "Nonzeros in rows: " << SpA.get_row() << "\n";
+    std::cout << "Nonzeros in columns: " << SpA.get_colind() << "\n";
+
+    std::vector<int> output_row, output_col;
+    SpA.get_triplet(output_row, output_col);
+    std::vector<double> values = Matrx.get_nonzeros();
+
+    std::cout << "Output row: " << output_row << "\n";
+    std::cout << "Output col: " << output_col << "\n";
+    std::cout << "Nonzeros: " << Matrx.get_nonzeros() << "\n";
+
+    using T = Eigen::Triplet<double>;
+    std::vector<T> TripletList;
+    TripletList.resize(values.size());
+    for(int k = 0; k < values.size(); ++k)
+        TripletList[k] = T(output_row[k], output_col[k], values[k]);
+
+    for(std::vector<T>::const_iterator it = TripletList.begin(); it != TripletList.end(); ++it)
+    {
+        std::cout << "triplet: " << (*it).row() << " " << (*it).col() << " " << (*it).value() << "\n";
+    }
+
+    Eigen::SparseMatrix<double> SpMatrx(Matrx.size1(), Matrx.size2());
+    SpMatrx.setFromTriplets(TripletList.begin(), TripletList.end());
+
+    std::cout << "Eigen sparse matrix: \n" << SpMatrx << "\n";
 
     return 0;
 }
