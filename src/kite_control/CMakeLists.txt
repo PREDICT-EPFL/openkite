@@ -15,4 +15,7 @@ target_link_libraries(kite_identification_test kiteNMPF)
 add_executable(nmpf_node nmpf_node.cpp nmpf_node.hpp)
 target_link_libraries(nmpf_node kiteNMPF odesolver ${catkin_LIBRARIES})
 
+add_executable(spline_following spline_following.cpp )
+target_link_libraries(spline_following kiteNMPF)
+
 add_dependencies(nmpf_node openkite_generate_messages_cpp)
