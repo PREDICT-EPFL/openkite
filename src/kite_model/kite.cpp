@@ -467,12 +467,22 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** ------------------------------ **/
     /**        Tether parameters       **/
     /** ------------------------------ **/
+    /**
     double Ks = KiteProps.Tether.Ks;
     double Kd = KiteProps.Tether.Kd;
     double Lt = KiteProps.Tether.length;
     double rx = KiteProps.Tether.rx;
     double ry = KiteProps.Tether.ry;
     double rz = KiteProps.Tether.rz;
+    */
+    double ry = KiteProps.Tether.ry;
+
+    SX Ks = SX::sym("Ks");
+    SX Kd = SX::sym("Kd");
+    SX Lt = SX::sym("Lt");
+    SX rx = SX::sym("rx");
+    //SX ry = SX::sym("ry");
+    SX rz = SX::sym("rz");
 
     /** -------------------------- **/
     /** State variables definition **/
@@ -615,7 +625,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     auto state = SX::vertcat({v, w, r, q});
     auto control = SX::vertcat({T, dE, dR});
     auto params  = SX::vertcat({CL0, CLa_tot, CD0_tot, CYb, Cm0, Cma, Cnb, Clb, CLq, Cmq,
-                                CYr, Cnr, Clr, CYp, Clp, Cnp, CLde, CYdr, Cmde, Cndr, Cldr});
+                                CYr, Cnr, Clr, CYp, Clp, Cnp, CLde, CYdr, Cmde, Cndr, Cldr, Lt, Ks, Kd, rx, rz});
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
     Function dyn_func = Function("dynamics", {state, control, params}, {dynamics});

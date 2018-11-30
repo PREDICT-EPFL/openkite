@@ -175,7 +175,7 @@ DM ODESolver::pseudospectral_solve(const DM &X0, const DM &U)
 
         //DM dx = -DM::solve(dG_dx, G_);
 
-        JacG  = Eigen::MatrixXd::Map(DM::densify(dG_dx).nonzeros().data(), G.size1(), SX::vec(z).size1());
+        JacG = Eigen::MatrixXd::Map(DM::densify(dG_dx).nonzeros().data(), G.size1(), SX::vec(z).size1());
         GEig = Eigen::VectorXd::Map(DM::densify(G_).nonzeros().data(), SX::vec(z).size1());
 
         Eigen::VectorXd sol = JacG.partialPivLu().solve(-GEig);

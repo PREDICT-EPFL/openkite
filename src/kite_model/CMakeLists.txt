@@ -24,3 +24,5 @@ target_link_libraries(homotopy_test kiteNMPF kitemodel odesolver)
 add_executable(psarc_test psarc_test.cpp)
 target_link_libraries(psarc_test kitemodel odesolver)
 
+add_executable(psarc_simple_test psarc_simple_test.cpp)
+target_link_libraries(psarc_simple_test kitemodel odesolver)
