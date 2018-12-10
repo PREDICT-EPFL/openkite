@@ -1,6 +1,7 @@
 #ifndef SIMULATOR_H
 #define SIMULATOR_H
 
+#include "mobile_robot.h"
 #include "kite.h"
 #include "integrator.h"
 #include "ros/ros.h"
@@ -17,10 +18,9 @@ public:
     void simulate();
 
     casadi::DM getState(){return state;}
-    casadi::DM getPose(){return state(casadi::Slice(6,13));}
+    //casadi::DM getPose(){return state(casadi::Slice(6,13));}
 
     void publish_state();
-    void publish_pose();
 
     bool is_initialized(){return initialized;}
     void initialize(const casadi::DM &_init_value){state = _init_value; initialized = true;}

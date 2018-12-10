@@ -14,7 +14,7 @@ add_executable(kite_model_test kite_model_test.cpp)
 target_link_libraries(kite_model_test odesolver kitemodel ${Boost_UNIT_TEST_FRAMEWORK_LIBRARY})
 
 add_executable(simulator simulator.cpp simulator.h)
-target_link_libraries(simulator kitemodel odesolver ${catkin_LIBRARIES})
+target_link_libraries(simulator mobile_robot odesolver ${catkin_LIBRARIES})
 
 add_dependencies(simulator openkite_generate_messages_cpp)
 

@@ -6,7 +6,6 @@ void Simulator::controlCallback(const openkite::aircraft_controls::ConstPtr &msg
 {
     controls[0] = msg->thrust;
     controls[1] = msg->elevator;
-    controls[2] = msg->rudder;
 }
 
 Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
@@ -44,10 +43,10 @@ void Simulator::simulate()
 {
     Dict p = m_object->getParams();
     double dt = p["tf"];
+    //std::cout << "Received control signal: " << controls << "\n";
+    //std::cout << "STATE_SIM: " << state << "\n";
 
     state = m_object->solve(state, controls, dt);
-    //std::cout << "length : " << DM::norm_2(state(Slice(6,9))) << "\n";
-    //std::cout << "State: " << state << "\n";
 }
 
 void Simulator::publish_state()
@@ -56,46 +55,31 @@ void Simulator::publish_state()
 
     msg_state.header.stamp = ros::Time::now();
 
-    msg_state.twist[0].linear.x = state_vec[0];
-    msg_state.twist[0].linear.y = state_vec[1];
-    msg_state.twist[0].linear.z = state_vec[2];
+    msg_state.twist[0].linear.x = 0.0;
+    msg_state.twist[0].linear.y = 0.0;
+    msg_state.twist[0].linear.z = 0.0;
 
-    msg_state.twist[0].angular.x = state_vec[3];
-    msg_state.twist[0].angular.y = state_vec[4];
-    msg_state.twist[0].angular.z = state_vec[5];
+    msg_state.twist[0].angular.x = 0.0;
+    msg_state.twist[0].angular.y = 0.0;
+    msg_state.twist[0].angular.z = 0.0;
 
-    msg_state.transforms[0].translation.x = state_vec[6];
-    msg_state.transforms[0].translation.y = state_vec[7];
-    msg_state.transforms[0].translation.z = state_vec[8];
+    msg_state.transforms[0].translation.x = state_vec[0];
+    msg_state.transforms[0].translation.y = state_vec[1];
+    msg_state.transforms[0].translation.z = 0.0;
 
-    msg_state.transforms[0].rotation.w = state_vec[9];
-    msg_state.transforms[0].rotation.x = state_vec[10];
-    msg_state.transforms[0].rotation.y = state_vec[11];
-    msg_state.transforms[0].rotation.z = state_vec[12];
+    DM angle = state_vec[2];
+    DM q = DM::vertcat({cos(angle / 2), 0, 0, sin(angle / 2)});
+    std::vector<double> q_vec = q.nonzeros();
+
+    msg_state.transforms[0].rotation.w = q_vec[0];
+    msg_state.transforms[0].rotation.x = 0.0;
+    msg_state.transforms[0].rotation.y = 0.0;
+    msg_state.transforms[0].rotation.z = q_vec[3];
 
     /** publish current state estimation */
     state_pub.publish(msg_state);
 }
 
-void Simulator::publish_pose()
-{
-    DM pose = getPose();
-    std::vector<double> pose_vec = pose.nonzeros();
-
-    geometry_msgs::PoseStamped msg_pose;
-    msg_pose.header.stamp = ros::Time::now();
-
-    msg_pose.pose.position.x = pose_vec[0];
-    msg_pose.pose.position.y = pose_vec[1];
-    msg_pose.pose.position.z = pose_vec[2];
-
-    msg_pose.pose.orientation.w = pose_vec[3];
-    msg_pose.pose.orientation.x = pose_vec[4];
-    msg_pose.pose.orientation.y = pose_vec[5];
-    msg_pose.pose.orientation.z = pose_vec[6];
-
-    pose_pub.publish(msg_pose);
-}
 
 int main(int argc, char **argv)
 {
@@ -103,14 +87,7 @@ int main(int argc, char **argv)
     ros::NodeHandle n("~");
 
     /** create a kite object */
-    std::string kite_params_file;
-    n.param<std::string>("kite_params", kite_params_file, "./umx_radian.yaml");
-    std::cout << "Using kite parameters from : " << kite_params_file << "\n";
-    KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
-    AlgorithmProperties algo_props;
-    algo_props.Integrator = RK4;
-    algo_props.sampling_time = 0.02;
-    KiteDynamics kite = KiteDynamics(kite_props, algo_props);
+    MobileRobot robot;
 
     int broadcast_state;
     n.param<int>("broadcast_state", broadcast_state, 1);
@@ -123,7 +100,7 @@ int main(int argc, char **argv)
     dt = std::roundf(dt * 1000) / 1000;
 
     Dict params({{"tf", dt}, {"tol", 1e-6}, {"method", CVODES}});
-    Function ode = kite.getNumericDynamics();
+    Function ode = robot.getDynamics();
     ODESolver object(ode, params);
 
     Simulator simulator(object, n);
@@ -136,8 +113,6 @@ int main(int argc, char **argv)
             simulator.simulate();
             if(broadcast_state)
                 simulator.publish_state();
-            else
-                simulator.publish_pose();
         }
 
         ros::spinOnce();
