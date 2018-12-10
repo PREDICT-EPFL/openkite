@@ -149,8 +149,8 @@ KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh)
     MarkerProperties m_props;
     m_props.id = 101;
     m_props.type = visualization_msgs::Marker::MESH_RESOURCE;
-    m_props.mesh_resource = "package://openkite/meshes/kite_rviz.dae";
-    m_props.scale = Scale(0.1, 0.1, 0.1);
+    m_props.mesh_resource = "package://openkite/meshes/am_chassis.stl";
+    m_props.scale = Scale(0.001, 0.001, 0.001);
     m_props.color = Color(0.0, 1.0, 0.0, 0.5);
     m_props.configureMarker(m_kite_marker);
     m_kite_marker.lifetime = ros::Duration();
@@ -159,6 +159,7 @@ KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh)
     m_props.id = 201;
     m_props.type  = visualization_msgs::Marker::SPHERE_LIST;
     m_props.color = Color(1.0, 0.0, 0.0, 0.5);
+    m_props.scale = Scale(0.2, 0.2, 0.2);
     m_props.configureMarker(virtual_state_markers);
     virtual_state_markers.lifetime = ros::Duration();
 
@@ -187,14 +188,10 @@ void KiteVisualizer::filterCallback(const sensor_msgs::MultiDOFJointState::Const
     /** transform kite pose to Rviz reference frame */
     /** @badcode: */
     DM pose = convertToDM(*msg);
-    DM norm = DM::norm_2(pose(Slice(0,3)));
-    if(norm.nonzeros()[0] >= 2.67)
-        tether_active = true;
-    else
-        tether_active = false;
+    tether_active = false;
 
     DM kite_state_dm = world2rviz(pose);
-   state2marker(kite_state_dm, m_kite_marker);
+    state2marker(kite_state_dm, m_kite_marker);
     initialized = true;
 }
 
@@ -209,7 +206,6 @@ DM KiteVisualizer::convertToDM(const sensor_msgs::MultiDOFJointState &_value, co
     uint num_poses = _value.transforms.size();
     int  size      = with_virtual ? 10 : 7;
     DM poses = DM::zeros(size, num_poses);
-
     for(uint i = 0; i < num_poses; ++i)
     {
         poses(0, i) = _value.transforms[i].translation.x;
@@ -233,7 +229,8 @@ DM KiteVisualizer::convertToDM(const sensor_msgs::MultiDOFJointState &_value, co
 DM KiteVisualizer::world2rviz(const DM &world_pose)
 {
     DM pose = DM::zeros(world_pose.size());
-    DM transform = DM::vertcat({0, 1, 0, 0});
+    DM transform = DM::vertcat({0.7071, 0, 0, 0.7071});
+    //DM transform = DM::vertcat({1, 0, 0, 0});
     /** do only position transform if receive a point*/
     if(pose.size1() == 3)
     {
@@ -247,9 +244,12 @@ DM KiteVisualizer::world2rviz(const DM &world_pose)
     /** position transform */
     DM q_pose = quat_multiply(transform, DM::vertcat({0, world_pose(Slice(0,3), 0) }) );
     DM tmp = quat_multiply(q_pose, quat_inverse(transform) );
-    pose(Slice(0,3), 0) = tmp(Slice(1,4), 0);
+    //pose(Slice(0,3), 0) = tmp(Slice(1,4), 0);
+    pose(Slice(0,3), 0) = world_pose(Slice(0,3), 0);
     /** attitude transform */
-    pose(Slice(3,7),0) = quat_multiply(quat_multiply(transform, world_pose(Slice(3,7), 0)), quat_inverse(transform));
+    //pose(Slice(3,7),0) = quat_multiply(quat_multiply(transform, world_pose(Slice(3,7), 0)), quat_inverse(transform));
+    pose(Slice(3,7),0) = quat_multiply(transform, world_pose(Slice(3,7), 0));
+    //std::cout << "before: " << world_pose(Slice(3,7), 0) << " after: " << pose(Slice(3,7),0) << "\n";
 
     if(pose.size1() == 10)
     {
@@ -311,7 +311,7 @@ visualization_msgs::Marker KiteVisualizer::getVirtualTrajectory()
     while( std::distance<DMVector::const_iterator>(it, split_traj.end()) > 0)
     {
         DM point = (*it)(Slice(7, 10));
-        point = world2rviz(point);
+        //point = world2rviz(point);
         geometry_msgs::Point p;
         std::vector<double> coords = point.nonzeros();
         p.x = coords[0];
@@ -344,6 +344,11 @@ void KiteVisualizer::state2marker(const DM &kite_pose, visualization_msgs::Marke
     _marker.pose.orientation.z = pose[6];
 }
 
+SX polynomial(const SX &coef, const SX &x0, const SX &x)
+{
+    SX poly = SX::vertcat(SXVector{pow(x-x0, 3), pow(x-x0, 2), x-x0, 1});
+    return SX::dot(coef, poly);
+}
 
 int main( int argc, char** argv )
 {
@@ -370,7 +375,7 @@ int main( int argc, char** argv )
     /** kite marker set up */
     marker_props.id = 1;
     marker_props.type = visualization_msgs::Marker::MESH_RESOURCE;
-    marker_props.mesh_resource = "package://openkite/meshes/kite_rviz.dae";
+    marker_props.mesh_resource = "package://openkite/meshes/am_chassis.stl";
     marker_props.scale = Scale(0.1, 0.1, 0.1);
     marker_props.configureMarker(kite_marker);
     kite_marker.lifetime = ros::Duration();
@@ -383,27 +388,51 @@ int main( int argc, char** argv )
     marker_props.configureMarker(path_marker);
     path_marker.lifetime = ros::Duration();
 
-    /** create a path */
+    /** create the path */
+    SX breaks = DM({0, 1.4225, 2.8451, 4.2676, 5.6902, 7.1127, 8.5353, 9.9578, 11.3803});
+    SX coeffs_x = DM::horzcat(DMVector{DM({-0.0049,    0.0510,   -0.0261,   -5.0000}),
+                                     DM({-0.0049,    0.0300,    0.0890,   -4.9482}),
+                                     DM({0.0555,    0.0090,    0.1445,   -4.7750}),
+                                     DM({-0.0635,    0.2459,    0.5071,   -4.3915}),
+                                     DM({-0.0173,   -0.0252,    0.8211,   -3.3554}),
+                                     DM({0.0212,   -0.0989,    0.6446,   -2.2881}),
+                                     DM({-0.0003,   -0.0082,    0.4923,   -1.5100}),
+                                     DM({-0.0003,   -0.0093,    0.4674,   -0.8270}) });
+
+    SX coeffs_y = DM::horzcat(DMVector{DM({0.0005,   -0.0047,    1.0048,   -0.0000}),
+                                       DM({0.0005,   -0.0025,    0.9945,    1.4213}),
+                                       DM({-0.0148,   -0.0002,    0.9908,    2.8326}),
+                                       DM({-0.1311,   -0.0632,    0.9007,    4.1992}),
+                                       DM({0.1598,   -0.6226,   -0.0749,    4.9753}),
+                                       DM({-0.0221,    0.0594,   -0.8761,    4.0689}),
+                                       DM({0.0071,   -0.0351,   -0.8415,    2.8790}),
+                                       DM({0.0071,   -0.0050,   -0.8984,    1.6313}) });
+
     SX x = SX::sym("x");
-    double radius   = 2.72;
-    double altitude = 0.0;
-    SX Path = SX::vertcat(SXVector{radius * cos(x), radius * sin(x), altitude});
-    /** rotate path */
-    SX q_rot = SX::vertcat({cos(0 / 24), 0, sin(0 / 24), 0});
-    SX q_rot_inv = kmath::quat_inverse(q_rot);
-    SX qP_tmp = kmath::quat_multiply(q_rot_inv, SX::vertcat({0, Path}));
-    SX qP_q = kmath::quat_multiply(qP_tmp, q_rot);
-    Path = qP_q(Slice(1,4), 0);
+    coeffs_x = coeffs_x.T();
+    coeffs_y = coeffs_y.T();
+
+    SX path_x = 0;
+    SX path_y = 0;
+    for(int i = 0; i <= 7; ++i)
+    {
+        SX pix = polynomial(coeffs_x(i, Slice(0, 4)).T(), SX(breaks[i]), x);
+        path_x += pix * (SX::heaviside(x - breaks[i] + 1e-5) - SX::heaviside(x - breaks[i+1])); // 1e-5 - Heaviside correction
+
+        SX piy = polynomial(coeffs_y(i, Slice(0, 4)).T(), SX(breaks[i]), x);
+        path_y += piy * (SX::heaviside(x - breaks[i] + 1e-5) - SX::heaviside(x - breaks[i+1])); // 1e-5 - Heaviside correction
+    }
+    SX Path = SX::vertcat(SXVector{path_x, path_y});
 
     Function path_fun = Function("path", {x}, {Path});
-    for(double alpha = 0; alpha < 2 * M_PI; alpha += 0.2)
+    for(double alpha = 0; alpha < 11; alpha += 0.1)
     {
         DMVector res = path_fun( DMVector{DM(alpha)} );
         geometry_msgs::Point p;
         DM point = res[0];
         p.x = point.nonzeros()[0];
         p.y = point.nonzeros()[1];
-        p.z = point.nonzeros()[2];
+        p.z = 0.0;
         path_marker.points.push_back(p);
     }
 
@@ -445,7 +474,6 @@ int main( int argc, char** argv )
 
         if(!published_once)
         {
-            //marker_pub.publish(gs_marker);
             marker_pub.publish(path_marker);
             published_once = true;
         }

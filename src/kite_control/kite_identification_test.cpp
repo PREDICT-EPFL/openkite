@@ -66,9 +66,6 @@ int main(void)
 
     /** get dynamics function and state Jacobian */
     Function DynamicsFunc = kite.getNumericDynamics();
-    SX X = kite.getSymbolicState();
-    SX U = kite.getSymbolicControl();
-    SX P = kite.getSymbolicParameters();
 
     /** state bounds */
     DM LBX = DM::vertcat({2.0, -DM::inf(1), -DM::inf(1), -4 * M_PI, -4 * M_PI, -4 * M_PI, -DM::inf(1), -DM::inf(1), -DM::inf(1),
@@ -113,15 +110,16 @@ int main(void)
     double rz = config["tether"]["rz"].as<double>();
 
     DM REF_P = DM::vertcat({CL0, CLa_tot, CD0_tot, CYb, Cm0, Cma, Cnb, Clb, CLq, Cmq,
-                            CYr, Cnr, Clr, CYp, Clp, Cnp, CLde, CYdr, Cmde, Cndr, Cldr});
+                            CYr, Cnr, Clr, CYp, Clp, Cnp, CLde, CYdr, Cmde, Cndr, Cldr,
+                            Lt, Ks, Kd, rx, rz});
     DM LBP = REF_P; DM UBP = REF_P;
-    LBP = -DM::inf(21);
-    UBP = DM::inf(21);
+    LBP = -DM::inf(26);
+    UBP = DM::inf(26);
 
 
-    LBP[0] = REF_P[0] -  0.1 * fabs(REF_P[0]); UBP[0] = REF_P[0] +  0.1 * fabs(REF_P[0]); // CL0
-    LBP[1] = REF_P[1] - 0.05 * fabs(REF_P[1]); UBP[1] = REF_P[1] +  0.1 * fabs(REF_P[1]); // CLa
-    LBP[2] = REF_P[2] -  0.1 * fabs(REF_P[2]); UBP[2] = REF_P[2] + 0.25 * fabs(REF_P[2]); // CD0
+    LBP[0] = REF_P[0] -  0.1 * fabs(REF_P[0]); UBP[0] = REF_P[0] +  0.2 * fabs(REF_P[0]); // CL0
+    LBP[1] = REF_P[1] - 0.1 * fabs(REF_P[1]); UBP[1] = REF_P[1] +  0.2 * fabs(REF_P[1]); // CLa
+    LBP[2] = REF_P[2] -  0.2 * fabs(REF_P[2]); UBP[2] = REF_P[2] + 0.25 * fabs(REF_P[2]); // CD0
     LBP[3] = REF_P[3] -  0.5 * fabs(REF_P[3]); UBP[3] = REF_P[3] +  0.5 * fabs(REF_P[3]); // CYb
     LBP[4] = REF_P[4] -  0.5 * fabs(REF_P[4]); UBP[4] = REF_P[4] +  0.5 * fabs(REF_P[4]); // Cm0
     LBP[5] = REF_P[5] -  0.1 * fabs(REF_P[5]); UBP[5] = REF_P[5] + 0.30 * fabs(REF_P[5]); // Cma
@@ -142,11 +140,11 @@ int main(void)
     LBP[19] = REF_P[19] -  0.5 * fabs(REF_P[19]); UBP[19] = REF_P[19] +  0.5 * fabs(REF_P[19]); // Cndr
     LBP[20] = REF_P[20] -  0.5 * fabs(REF_P[20]); UBP[20] = REF_P[20] +  0.5 * fabs(REF_P[20]); // Cldr
 
-    // LBP[21] = 2.65;    UBP[21] = 2.75;   // tether length
-    // LBP[22] = 150.0;  UBP[22] = 150.0;  // Ks
-    // LBP[23] = 0.0;    UBP[23] = 10;   // Kd
-    // LBP[24] = 0.0;    UBP[24] = 0.0;   // rx
-    // LBP[25] = 0.0;    UBP[25] = 0.0;  // rz
+    LBP[21] = 2.60;    UBP[21] = 2.70;   // tether length
+    LBP[22] = 50.0;    UBP[22] = 100.0;  // Ks
+    LBP[23] = 5.0;     UBP[23] = 15;     // Kd
+    LBP[24] = -0.01;   UBP[24] = 0.01;   // rx
+    LBP[25] = -0.01;   UBP[25] = 0.01;   // rz
 
     std::cout << "OK so far \n";
 
@@ -155,7 +153,7 @@ int main(void)
     const int poly_order   = 5;
     const int dimx         = 13;
     const int dimu         = 3;
-    const int dimp         = 21;
+    const int dimp         = 26;
     const double tf        = 10.0;
 
     Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
@@ -363,11 +361,11 @@ int main(void)
     config["aerodynamic"]["Cndr"] = new_params_vec[19];
     config["aerodynamic"]["Cldr"] = new_params_vec[20];
 
-    // config["tether"]["length"] = new_params_vec[21];
-    // config["tether"]["Ks"] = new_params_vec[22];
-    // config["tether"]["Kd"] = new_params_vec[23];
-    // config["tether"]["rx"] = new_params_vec[24];
-    // config["tether"]["rz"] = new_params_vec[25];
+    config["tether"]["length"] = new_params_vec[21];
+    config["tether"]["Ks"] = new_params_vec[22];
+    config["tether"]["Kd"] = new_params_vec[23];
+    config["tether"]["rx"] = new_params_vec[24];
+    config["tether"]["rz"] = new_params_vec[25];
 
     std::ofstream fout("umx_radian_id.yaml");
     fout << config;
