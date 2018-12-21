@@ -79,7 +79,7 @@ void KiteNMPF::createNLP()
     DynamicsFunc = aug_dynamo;
 
     /** ----------------------------------------------------------------------------------*/
-    const int num_segments = 4;
+    const int num_segments = 3;
     const int poly_order   = 4;
     const int dimx         = 5;
     const int dimu         = 2;
@@ -94,7 +94,7 @@ void KiteNMPF::createNLP()
 
     SX x = SX::sym("x", dimx);
     SX u = SX::sym("u", dimu);
-    double tf = 2.5;
+    double tf = 2.0;
 
     if(scale)
     {
