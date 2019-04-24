@@ -1,7 +1,9 @@
 #ifndef SIMULATOR_H
 #define SIMULATOR_H
 
+//#include "stochastic_kite.hpp"
 #include "mobile_robot.h"
+#include "kinematic_robot.hpp"
 #include "kite.h"
 #include "integrator.h"
 #include "ros/ros.h"
@@ -18,6 +20,7 @@ public:
     void simulate();
 
     casadi::DM getState(){return state;}
+    void setControls(const casadi::DM &_control){controls = _control;}
     //casadi::DM getPose(){return state(casadi::Slice(6,13));}
 
     void publish_state();

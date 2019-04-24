@@ -1,7 +1,6 @@
 <launch>
   <node pkg="openkite" type="simulator" name="simulator" output="screen">
-    <rosparam param="init_state"> [-5.0,-1.5,0.0]</rosparam>
-    <param name="kite_params" value="/Users/plistov/EPFL/ROS/ros_catkin_ws/devel/lib/openkite/umx_radian2.yaml" />
+    <rosparam param="init_state"> [0.0,0,0,6,-2,0]</rosparam>
   </node>
   <node pkg="openkite" type="kite_visualization_node" name="visualisation_node" output="screen">
   </node>
