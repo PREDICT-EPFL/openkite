@@ -28,6 +28,7 @@ public:
     BaseClass CollocateDynamics(casadi::Function &dynamics, const double &t0, const double &tf);
     BaseClass CollocateCost(casadi::Function &MayerTerm, casadi::Function &LagrangeTerm,
                             const double &t0, const double &tf);
+    BaseClass CollocateFunction(casadi::Function &_Function);
     BaseClass CollocateIdCost(casadi::Function &IdCost, casadi::DM data, const double &t0, const double &tf);
 
     typedef std::function<BaseClass(BaseClass, BaseClass, BaseClass)> functor;
@@ -330,6 +331,46 @@ BaseClass Chebyshev<BaseClass, PolyOrder, NumSegments, NX, NU, NP>::CollocateCos
     }
 
     return Mayer + Lagrange;
+}
+
+/** Collocate an arbitrary function */
+template<class BaseClass,
+         int PolyOrder,
+         int NumSegments,
+         int NX,
+         int NU,
+         int NP>
+BaseClass Chebyshev<BaseClass, PolyOrder, NumSegments, NX, NU, NP>::CollocateFunction(casadi::Function &_Function)
+{
+    /** evaluate function at the collocation points */
+    int DIMX = _X.size1();
+    int NC = _Function.nnz_out();
+    int DIMC = (NumSegments * PolyOrder + 1) * NC;
+    BaseClass F_XU = BaseClass::zeros(DIMC);
+    casadi::SXVector tmp;
+    int j = 0;
+    int k = 0;
+
+    for (int i = 0; i <= DIMX - NX; i += NX)
+    {
+        if(NP == 0)
+        {
+            tmp = _Function(casadi::SXVector{_X(casadi::Slice(i, i + NX)),
+                                             _U(casadi::Slice(j, j + NU)) });
+        }
+        else
+        {
+            tmp = _Function(casadi::SXVector{_X(casadi::Slice(i, i + NX)),
+                                             _U(casadi::Slice(j, j + NU)),
+                                             _P});
+        }
+
+        F_XU(casadi::Slice(k, k + NC)) = tmp[0];
+        j += NU;
+        k += NC;
+    }
+
+    return F_XU;
 }
 
 /** Collocate Identification cost function */
