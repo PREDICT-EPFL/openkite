@@ -150,7 +150,8 @@ KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh)
     m_props.id = 101;
     m_props.type = visualization_msgs::Marker::MESH_RESOURCE;
     m_props.mesh_resource = "package://openkite/meshes/am_chassis.stl";
-    m_props.scale = Scale(0.001, 0.001, 0.001);
+    m_props.scale = Scale(0.002, 0.003, 0.0015);
+    //m_props.scale = Scale(0.1, 0.1, 0.1);
     m_props.color = Color(0.0, 1.0, 0.0, 0.5);
     m_props.configureMarker(m_kite_marker);
     m_kite_marker.lifetime = ros::Duration();
@@ -292,7 +293,7 @@ visualization_msgs::MarkerArray KiteVisualizer::getOptimalTrajectory()
         tmp_marker.id = id_counter;
 
         m_array.markers.push_back(tmp_marker);
-        std::advance(it, 2);
+        std::advance(it, 1);
     }
     return m_array;
 }
@@ -362,6 +363,7 @@ int main( int argc, char** argv )
     visualization_msgs::Marker gs_marker;
     visualization_msgs::Marker kite_marker;
     visualization_msgs::Marker path_marker;
+    visualization_msgs::Marker path_marker2;
     visualization_msgs::Marker tether_marker;
 
     MarkerProperties marker_props;
@@ -383,58 +385,46 @@ int main( int argc, char** argv )
     /** path markers set up */
     marker_props.id = 3;
     marker_props.type = visualization_msgs::Marker::LINE_STRIP;
-    marker_props.scale.x = 0.025;
+    marker_props.scale.x = 0.25;
     marker_props.color = Color(0, 1, 0, 0.5);
     marker_props.configureMarker(path_marker);
     path_marker.lifetime = ros::Duration();
 
-    /** create the path */
-    SX breaks = DM({0, 1.4225, 2.8451, 4.2676, 5.6902, 7.1127, 8.5353, 9.9578, 11.3803});
-    SX coeffs_x = DM::horzcat(DMVector{DM({-0.0049,    0.0510,   -0.0261,   -5.0000}),
-                                     DM({-0.0049,    0.0300,    0.0890,   -4.9482}),
-                                     DM({0.0555,    0.0090,    0.1445,   -4.7750}),
-                                     DM({-0.0635,    0.2459,    0.5071,   -4.3915}),
-                                     DM({-0.0173,   -0.0252,    0.8211,   -3.3554}),
-                                     DM({0.0212,   -0.0989,    0.6446,   -2.2881}),
-                                     DM({-0.0003,   -0.0082,    0.4923,   -1.5100}),
-                                     DM({-0.0003,   -0.0093,    0.4674,   -0.8270}) });
+    /** path markers set up */
+    marker_props.id = 4;
+    marker_props.type = visualization_msgs::Marker::LINE_STRIP;
+    marker_props.scale.x = 0.25;
+    marker_props.color = Color(0, 1, 0, 0.5);
+    marker_props.configureMarker(path_marker2);
+    path_marker2.lifetime = ros::Duration();
 
-    SX coeffs_y = DM::horzcat(DMVector{DM({0.0005,   -0.0047,    1.0048,   -0.0000}),
-                                       DM({0.0005,   -0.0025,    0.9945,    1.4213}),
-                                       DM({-0.0148,   -0.0002,    0.9908,    2.8326}),
-                                       DM({-0.1311,   -0.0632,    0.9007,    4.1992}),
-                                       DM({0.1598,   -0.6226,   -0.0749,    4.9753}),
-                                       DM({-0.0221,    0.0594,   -0.8761,    4.0689}),
-                                       DM({0.0071,   -0.0351,   -0.8415,    2.8790}),
-                                       DM({0.0071,   -0.0050,   -0.8984,    1.6313}) });
+    /** create an obstacle */
+    path_marker.points.resize(5);
+    double dx = -4.5;
+    path_marker.points[0].x = -2.4 + dx;
+    path_marker.points[0].y = -1;
+    path_marker.points[1].x = 2.4 + dx;
+    path_marker.points[1].y = -1;
+    path_marker.points[2].x = 2.4 + dx;
+    path_marker.points[2].y = 1;
+    path_marker.points[3].x = -2.4 + dx;
+    path_marker.points[3].y = 1;
+    path_marker.points[4].x = -2.4 + dx;
+    path_marker.points[4].y = -1;
 
-    SX x = SX::sym("x");
-    coeffs_x = coeffs_x.T();
-    coeffs_y = coeffs_y.T();
-
-    SX path_x = 0;
-    SX path_y = 0;
-    for(int i = 0; i <= 7; ++i)
-    {
-        SX pix = polynomial(coeffs_x(i, Slice(0, 4)).T(), SX(breaks[i]), x);
-        path_x += pix * (SX::heaviside(x - breaks[i] + 1e-5) - SX::heaviside(x - breaks[i+1])); // 1e-5 - Heaviside correction
-
-        SX piy = polynomial(coeffs_y(i, Slice(0, 4)).T(), SX(breaks[i]), x);
-        path_y += piy * (SX::heaviside(x - breaks[i] + 1e-5) - SX::heaviside(x - breaks[i+1])); // 1e-5 - Heaviside correction
-    }
-    SX Path = SX::vertcat(SXVector{path_x, path_y});
-
-    Function path_fun = Function("path", {x}, {Path});
-    for(double alpha = 0; alpha < 11; alpha += 0.1)
-    {
-        DMVector res = path_fun( DMVector{DM(alpha)} );
-        geometry_msgs::Point p;
-        DM point = res[0];
-        p.x = point.nonzeros()[0];
-        p.y = point.nonzeros()[1];
-        p.z = 0.0;
-        path_marker.points.push_back(p);
-    }
+    /** create a 2nd obstacle */
+    path_marker2.points.resize(5);
+    dx = 4.5;
+    path_marker2.points[0].x = -2.4 + dx;
+    path_marker2.points[0].y = -1;
+    path_marker2.points[1].x = 2.4 + dx;
+    path_marker2.points[1].y = -1;
+    path_marker2.points[2].x = 2.4 + dx;
+    path_marker2.points[2].y = 1;
+    path_marker2.points[3].x = -2.4 + dx;
+    path_marker2.points[3].y = 1;
+    path_marker2.points[4].x = -2.4 + dx;
+    path_marker2.points[4].y = -1;
 
     bool published_once = false;
 
@@ -475,6 +465,7 @@ int main( int argc, char** argv )
         if(!published_once)
         {
             marker_pub.publish(path_marker);
+            marker_pub.publish(path_marker2);
             published_once = true;
         }
 
