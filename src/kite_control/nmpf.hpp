@@ -327,7 +327,7 @@ void nmpf<System, Path, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi:
     OPTS["ipopt.print_level"]           = 0;
     OPTS["ipopt.tol"]                   = 1e-4;
     OPTS["ipopt.acceptable_tol"]        = 1e-4;
-    OPTS["ipopt.max_iter"]              = 140;
+    OPTS["ipopt.max_iter"]              = 150;
     OPTS["ipopt.warm_start_init_point"] = "yes";
 
     /** set user defined options */
@@ -376,6 +376,8 @@ void nmpf<System, Path, NX, NU, NumSegments, PolyOrder>::computeControl(const ca
     double flexibility  = 0;//Scale_X(nx, nx).nonzeros()[0] * 0.78;     // ~ pi / 4
 
     int idx_theta;
+
+    std::cout << "Compute control at: " << X0 << "\n";
 
     if(WARM_START)
     {
