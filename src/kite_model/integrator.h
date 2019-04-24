@@ -72,6 +72,8 @@ public:
     casadi::DM P, R;
     int scale;
 
+    casadi::Function TraceFunction;
+
 private:
     casadi::SX G;
     casadi::SX opt_var;
@@ -132,7 +134,7 @@ PSODESolver<PolyOrder, NumSegments, NX, NU>::PSODESolver(casadi::Function ODE, c
     casadi::SX LBX = casadi::SX::repmat(-casadi::SX::inf(), NX, 1);
     casadi::SX UBX = casadi::SX::repmat(casadi::SX::inf(), NX, 1);
     /** dirty hack */
-    LBX[0] = P(1,1) * 2.0;
+    //LBX[0] = P(1,1) * 2.0;
     casadi::SX lbx = casadi::SX::repmat(LBX, (NumSegments * PolyOrder + 1), 1);
     casadi::SX ubx = casadi::SX::repmat(UBX, (NumSegments * PolyOrder + 1), 1);
 
@@ -143,16 +145,24 @@ PSODESolver<PolyOrder, NumSegments, NX, NU>::PSODESolver(casadi::Function ODE, c
     ubx = casadi::SX::vertcat( {ubx, casadi::SX::repmat(UBU, (NumSegments * PolyOrder + 1), 1)} );
 
     /** formulate NLP */
+    casadi::SX reg_cost = 0.0;
+    if(props.find("reg_lag") != props.end())
+        reg_cost = props.find("reg_lag")->second;
+
     NLP["x"] = opt_var;
-    NLP["f"] = 1e-3 * casadi::SX::dot(G,G);
+    NLP["f"] = reg_cost * casadi::SX::dot(G,G);
     NLP["g"] = G;
+
+    casadi::SX sym_jac = casadi::SX::jacobian(G,opt_var);
+    Jacobian = casadi::Function("Jacobi",{opt_var},{sym_jac});
+    TraceFunction = Jacobian;
 
     OPTS["ipopt.linear_solver"]  = "ma97";
     OPTS["ipopt.print_level"]    = 5;
     OPTS["ipopt.tol"]            = 1e-4;
     OPTS["ipopt.acceptable_tol"] = 1e-4;
     OPTS["ipopt.max_iter"]       = 3000;
-    OPTS["ipopt.hessian_approximation"] = "limited-memory";
+    //OPTS["ipopt.hessian_approximation"] = "limited-memory";
     NLP_Solver = nlpsol("solver", "ipopt", NLP, OPTS);
 
     std::cout << "problem set \n";
@@ -240,6 +250,15 @@ casadi::DM PSODESolver<PolyOrder, NumSegments, NX, NU>::solve(const casadi::DM &
     }
 
     std::cout << NLP_Solver.stats() << "\n";
+    casadi::Dict stats = NLP_Solver.stats();
+    std::string solve_status = static_cast<std::string>(stats["return_status"]);
+    if(solve_status.compare("Invalid_Number_Detected") == 0)
+    {
+        std::cout << "X0 : " << ARG["x0"] << "\n";
+        std::cout << "Jacoabian: \n" << TraceFunction({ARG["X0"]})[0] << "\n";
+        //assert(false);
+    }
+
     return xt;
 }
 

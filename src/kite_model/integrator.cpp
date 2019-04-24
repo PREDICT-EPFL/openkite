@@ -114,6 +114,7 @@ DM ODESolver::cvodes_solve(const DM &X0, const DM &U)
     try
     {
         DMDict args = {{"x0", X0}, {"p", U}};
+        //std::cout << args << "\n";
         out = cvodes_integrator(args);
     }
     catch(std::exception &e)
