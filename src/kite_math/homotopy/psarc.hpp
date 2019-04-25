@@ -16,7 +16,7 @@ template<typename Scalar>
 Eigen::SparseMatrix<Scalar> C2ESparse(const casadi::DM &matrix)
 {
     casadi::Sparsity SpA = matrix.get_sparsity();
-    std::vector<int> output_row, output_col;
+    std::vector<casadi_int> output_row, output_col;
     SpA.get_triplet(output_row, output_col);
     std::vector<double> values = matrix.get_nonzeros();
 
@@ -201,7 +201,7 @@ symbolic_psarc<Equalities, CorrectorProps>::symbolic_psarc(const typename Equali
 
     std::cout << "Corrector created \n";
     casadi::DM LBX = -casadi::DM::inf(13);
-    LBX[0] = 1.0;
+    LBX(0) = 1.0;
 
     int re_size = x.size1() - 501 * 13;
     casadi::DM ctl_lbx = -casadi::DM::inf(re_size);

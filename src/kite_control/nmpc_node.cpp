@@ -7,13 +7,13 @@ void KiteNMPF_Node::filterCallback(const sensor_msgs::MultiDOFJointState::ConstP
 
     DM estimation = convertToDM(*msg);
     kite_state = casadi::DM::zeros(6);
-    kite_state[0] = estimation[0]; // vx
-    kite_state[1] = estimation[1]; // vy
-    kite_state[2] = estimation[5]; // omega
+    kite_state(0) = estimation(0); // vx
+    kite_state(1) = estimation(1); // vy
+    kite_state(2) = estimation(5); // omega
 
-    kite_state[3] = estimation[6]; // x
-    kite_state[4] = estimation[7]; // y
-    kite_state[5] = 2 * asin(estimation[12]); // theta
+    kite_state(3) = estimation(6); // x
+    kite_state(4) = estimation(7); // y
+    kite_state(5) = 2 * asin(estimation(12)); // theta
 
     //kite_state[6] = estimation[3];  // omega_fw
     //kite_state[7] = estimation[4];  // omega_rw
@@ -80,19 +80,19 @@ KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh)
 DM KiteNMPF_Node::convertToDM(const sensor_msgs::MultiDOFJointState &_value)
 {
     DM value = DM::zeros(13);
-    value[0] = _value.twist.back().linear.x;
-    value[1] = _value.twist.back().linear.y;
-    value[2] = _value.twist.back().linear.z;
-    value[3] = _value.twist.back().angular.x;
-    value[4] = _value.twist.back().angular.y;
-    value[5] = _value.twist.back().angular.z;
-    value[6] = _value.transforms.back().translation.x;
-    value[7] = _value.transforms.back().translation.y;
-    value[8] = _value.transforms.back().translation.z;
-    value[9] = _value.transforms.back().rotation.w;
-    value[10] = _value.transforms.back().rotation.x;
-    value[11] = _value.transforms.back().rotation.y;
-    value[12] = _value.transforms.back().rotation.z;
+    value(0) = _value.twist.back().linear.x;
+    value(1) = _value.twist.back().linear.y;
+    value(2) = _value.twist.back().linear.z;
+    value(3) = _value.twist.back().angular.x;
+    value(4) = _value.twist.back().angular.y;
+    value(5) = _value.twist.back().angular.z;
+    value(6) = _value.transforms.back().translation.x;
+    value(7) = _value.transforms.back().translation.y;
+    value(8) = _value.transforms.back().translation.z;
+    value(9) = _value.transforms.back().rotation.w;
+    value(10) = _value.transforms.back().rotation.x;
+    value(11) = _value.transforms.back().rotation.y;
+    value(12) = _value.transforms.back().rotation.z;
 
     return value;
 }
