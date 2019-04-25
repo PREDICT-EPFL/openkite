@@ -106,7 +106,7 @@ int main()
     Eigen::VectorXd eig_vec = Eigen::VectorXd::Map(c.nonzeros().data(), c.nonzeros().size());
     std::cout << eig_vec << "\n";
 
-    std::cout << DM::sumRows(c) << "\n";
+    std::cout << DM::sum1(c) << "\n";
 
     DM EYE = DM::eye(7);
     Eigen::Matrix<double, 7, 7> eig_mat = Eigen::Matrix<double, 7, 7>::Map(DM::densify(EYE).nonzeros().data(), 7, 7);
@@ -129,6 +129,7 @@ int main()
 
     std::cout << "|----------------------------SPARSITY EXPERIMENT--------------------------------------| \n";
     /** create a sparse matrix */
+    /**
     Chebyshev<casadi::SX, 2, 2, 2, 1, 0>cheb;
     casadi::DM Matrx = cheb.CompD();
     std::cout << Matrx << "\n";
@@ -160,6 +161,7 @@ int main()
     SpMatrx.setFromTriplets(TripletList.begin(), TripletList.end());
 
     std::cout << "Eigen sparse matrix: \n" << SpMatrx << "\n";
+    */
 
     return 0;
 }

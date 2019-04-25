@@ -247,14 +247,14 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
     {
         casadi::SX _invSX = invSX(casadi::Slice(0, NX), casadi::Slice(0, NX));
         residual  = Reference - output({casadi::SX::mtimes(_invSX, x)})[0];
-        lagrange  = casadi::SX::sumRows( casadi::SX::mtimes(Q, pow(residual, 2)) );
-        lagrange = lagrange + casadi::SX::sumRows( casadi::SX::mtimes(R, pow(u, 2)) );
+        lagrange  = casadi::SX::sum1( casadi::SX::mtimes(Q, pow(residual, 2)) );
+        lagrange = lagrange + casadi::SX::sum1( casadi::SX::mtimes(R, pow(u, 2)) );
     }
     else
     {
         residual  = Reference - output({x})[0];
-        lagrange  = casadi::SX::sumRows( casadi::SX::mtimes(Q, pow(residual, 2)) );
-        lagrange = lagrange + casadi::SX::sumRows( casadi::SX::mtimes(R, pow(u, 2)) );
+        lagrange  = casadi::SX::sum1( casadi::SX::mtimes(Q, pow(residual, 2)) );
+        lagrange = lagrange + casadi::SX::sum1( casadi::SX::mtimes(R, pow(u, 2)) );
     }
 
     casadi::Function LagrangeTerm = casadi::Function("Lagrange", {x, u}, {lagrange});
@@ -262,7 +262,7 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
     /** trace functions */
     PathError = casadi::Function("PathError", {x}, {residual});
 
-    casadi::SX mayer           =  casadi::SX::sumRows( casadi::SX::mtimes(Q, pow(residual, 2)) );
+    casadi::SX mayer           =  casadi::SX::sum1( casadi::SX::mtimes(Q, pow(residual, 2)) );
     casadi::Function MayerTerm = casadi::Function("Mayer",{x}, {mayer});
     casadi::SX performance_idx = spectral.CollocateCost(MayerTerm, LagrangeTerm, 0.0, tf);
 
@@ -310,7 +310,7 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
 
     /** define constraints function */
     casadi::SX p = x(casadi::Slice(3,5));
-    casadi::Function th_f = casadi::Function("th_f",{x,u},{x[5]});
+    casadi::Function th_f = casadi::Function("th_f",{x,u},{x(5)});
     casadi::Function xy_f = casadi::Function("xy_f",{x,u}, {p});
     casadi::SX xy = spectral.CollocateFunction(xy_f);
     casadi::SX th = spectral.CollocateFunction(th_f);
@@ -329,7 +329,7 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
         int idx = i * 2;
         casadi::Slice slice_i = casadi::Slice(idx, idx + 2);
         /** compute the rotation matrix */
-        casadi::SX th_i = th[i];
+        casadi::SX th_i = th(i);
         casadi::SX col1 = casadi::SX::vertcat({cos(th_i), sin(th_i)});
         casadi::SX col2 = casadi::SX::vertcat({-sin(th_i), cos(th_i)});
         casadi::SX RX = casadi::SX::horzcat({col1,col2});
@@ -341,29 +341,29 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
 
 
         /** search for the first separating hyperplane */
-        casadi::SX cr1 = casadi::SX::dot(-n1(slice_i), r1_w) + b1[i];
-        casadi::SX cr2 = casadi::SX::dot(-n1(slice_i), r2_w) + b1[i];
-        casadi::SX cr3 = casadi::SX::dot(-n1(slice_i), r3_w) + b1[i];
-        casadi::SX cr4 = casadi::SX::dot(-n1(slice_i), r4_w) + b1[i];
+        casadi::SX cr1 = casadi::SX::dot(-n1(slice_i), r1_w) + b1(i);
+        casadi::SX cr2 = casadi::SX::dot(-n1(slice_i), r2_w) + b1(i);
+        casadi::SX cr3 = casadi::SX::dot(-n1(slice_i), r3_w) + b1(i);
+        casadi::SX cr4 = casadi::SX::dot(-n1(slice_i), r4_w) + b1(i);
 
-        casadi::SX c2 = casadi::SX::dot(n1(slice_i), p1) - b1[i];
-        casadi::SX c3 = casadi::SX::dot(n1(slice_i), p2) - b1[i];
-        casadi::SX c4 = casadi::SX::dot(n1(slice_i), p3) - b1[i];
-        casadi::SX c5 = casadi::SX::dot(n1(slice_i), p4) - b1[i];
+        casadi::SX c2 = casadi::SX::dot(n1(slice_i), p1) - b1(i);
+        casadi::SX c3 = casadi::SX::dot(n1(slice_i), p2) - b1(i);
+        casadi::SX c4 = casadi::SX::dot(n1(slice_i), p3) - b1(i);
+        casadi::SX c5 = casadi::SX::dot(n1(slice_i), p4) - b1(i);
         casadi::SX c6 = casadi::SX::dot(n1(slice_i), n1(slice_i)) - 1;
 
         ineq_constr = casadi::SX::vertcat({ineq_constr, cr1, cr2, cr3, cr4, c2, c3, c4, c5, c6});
 
         /** search for the second separating hyperplane */
-        casadi::SX cr1_2 = casadi::SX::dot(-n2(slice_i), r1_w) + b2[i];
-        casadi::SX cr2_2 = casadi::SX::dot(-n2(slice_i), r2_w) + b2[i];
-        casadi::SX cr3_2 = casadi::SX::dot(-n2(slice_i), r3_w) + b2[i];
-        casadi::SX cr4_2 = casadi::SX::dot(-n2(slice_i), r4_w) + b2[i];
+        casadi::SX cr1_2 = casadi::SX::dot(-n2(slice_i), r1_w) + b2(i);
+        casadi::SX cr2_2 = casadi::SX::dot(-n2(slice_i), r2_w) + b2(i);
+        casadi::SX cr3_2 = casadi::SX::dot(-n2(slice_i), r3_w) + b2(i);
+        casadi::SX cr4_2 = casadi::SX::dot(-n2(slice_i), r4_w) + b2(i);
 
-        casadi::SX c2_2 = casadi::SX::dot(n2(slice_i), q1) - b2[i];
-        casadi::SX c3_2 = casadi::SX::dot(n2(slice_i), q2) - b2[i];
-        casadi::SX c4_2 = casadi::SX::dot(n2(slice_i), q3) - b2[i];
-        casadi::SX c5_2 = casadi::SX::dot(n2(slice_i), q4) - b2[i];
+        casadi::SX c2_2 = casadi::SX::dot(n2(slice_i), q1) - b2(i);
+        casadi::SX c3_2 = casadi::SX::dot(n2(slice_i), q2) - b2(i);
+        casadi::SX c4_2 = casadi::SX::dot(n2(slice_i), q3) - b2(i);
+        casadi::SX c5_2 = casadi::SX::dot(n2(slice_i), q4) - b2(i);
         casadi::SX c6_2 = casadi::SX::dot(n2(slice_i), n2(slice_i)) - 1;
 
         ineq_constr = casadi::SX::vertcat({ineq_constr, cr1_2, cr2_2, cr3_2, cr4_2, c2_2, c3_2, c4_2, c5_2, c6_2});

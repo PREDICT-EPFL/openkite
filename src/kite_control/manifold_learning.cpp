@@ -17,8 +17,8 @@ int main(void)
 
     for(int k = 0; k < K; ++k)
     {
-        fx += ax[k] * cos(k * t) + bx[k] * sin(k * t);
-        fy += ay[k] * cos(k * t) + by[k] * sin(k * t);
+        fx += ax(k) * cos(k * t) + bx(k) * sin(k * t);
+        fy += ay(k) * cos(k * t) + by(k) * sin(k * t);
     }
 
     SX f = SX::vertcat({fx,fy});
@@ -78,7 +78,7 @@ int main(void)
     for(int i = 0; i < obstacles.size(); ++i)
     {
         // compute cost and residual
-        SX ti = atan2(obstacles.at(i)[1], obstacles.at(i)[0]);
+        SX ti = atan2(obstacles.at(i)(1), obstacles.at(i)(0));
         SX fr_ti = Fr({ti})[0];
         SX f_ti  = F(SXVector{p,ti})[0];
         SX residual = f_ti - fr_ti;
