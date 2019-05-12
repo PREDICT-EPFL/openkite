@@ -207,7 +207,26 @@ void KiteNMPF_Node::compute_control()
         //augmented_state = DM({0,0,0,-5,0,0});
     }
     /** compute control */
-    controller->computeControl(augmented_state);
+    /** create obstacles */
+    std::vector<Obstacle> obstacles;
+    Obstacle ob1, ob2;
+    ob1.pc = Point(0, 0);
+    ob1.p1 = Point(-2.5, -1);
+    ob1.p2 = Point(-2.5,  1);
+    ob1.p3 = Point(-7, -1);
+    ob1.p4 = Point(-7,  1);
+
+    /** second bounding box */
+    ob2.pc = Point(0,0);
+    ob2.p1 = Point(2.5, -1);
+    ob2.p2 = Point(2.5,  1);
+    ob2.p3 = Point(7.0, -1);
+    ob2.p4 = Point(7.0,  1);
+
+    obstacles.push_back(ob1);
+    obstacles.push_back(ob2);
+
+    controller->computeControl(augmented_state, obstacles);
     //DM opt_trajectory = controller->getOptimalTrajetory();
     //DM opt_control    = controller->getOptimalControl();
 

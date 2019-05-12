@@ -84,7 +84,7 @@ int main(void)
         SX residual = f_ti - fr_ti;
         cost += SX::dot(residual, residual);
 
-        // constraints: ray alignment
+        // constraints: ray alignment BUG cross- not dot product
         SX Lti = f_ti + fr_ti;
         SX align = SX::dot(Lti, fr_ti);
         align_constr = SX::vertcat({align_constr, align});

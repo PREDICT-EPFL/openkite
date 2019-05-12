@@ -2,10 +2,38 @@
 #define NMPC_HPP
 
 #include <memory>
-//#include "polymath.h"
 #include "pseudospectral/chebyshev.hpp"
 
 #define POLYMPC_USE_CONSTRAINTS
+
+/** 2D point type */
+template<typename Scalar = double>
+struct Point_t
+{
+    Point_t(const Scalar &_x, const Scalar &_y) : x(_x), y(_y) {}
+    Point_t() : x(0), y(0) {}
+    Scalar x;
+    Scalar y;
+
+    Point_t operator +(const Point_t &_p)
+    {
+        Point_t p;
+        p.x = this->x + _p.x;
+        p.y = this->y + _p.y;
+        return p;
+    }
+};
+
+template<typename Scalar = double>
+struct Obstacle_t
+{
+    Point_t<Scalar> pc;
+    Point_t<Scalar> p1, p2, p3, p4;
+    Point_t<Scalar> vc;
+};
+
+using Obstacle = Obstacle_t<double>;
+using Point    = Point_t<double>;
 
 namespace polympc {
 
@@ -69,7 +97,7 @@ public:
 
     void enableWarmStart(){WARM_START = true;}
     void disableWarmStart(){WARM_START = false;}
-    void computeControl(const casadi::DM &_X0);
+    void computeControl(const casadi::DM &_X0, const std::vector<Obstacle> &_obstacles = std::vector<Obstacle>());
 
     casadi::DM getOptimalControl(){return OptimalControl;}
     casadi::DM getOptimalTrajetory(){return OptimalTrajectory;}
@@ -84,6 +112,7 @@ private:
     casadi::SX Reference;
     uint   nx, nu, ny, np;
     double Tf;
+    unsigned long NumObs;
 
     casadi::SX       Contraints;
     casadi::Function ContraintsFunc;
@@ -138,6 +167,7 @@ nmpc<System, NX, NU, NumSegments, PolyOrder>::nmpc(const casadi::DM &_reference,
     nx = dynamics.nnz_out();
     nu = dynamics.nnz_in() - nx;
     Tf = tf;
+    NumObs = 2;
 
     assert(NX == nx);
     assert(NU == nu);
@@ -290,17 +320,8 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
     /** experimental : constraints*/
 #ifdef POLYMPC_USE_CONSTRAINTS
 
-    /** bounding box vertices */
-    casadi::SX p1 = casadi::SX::vertcat({-2.5,-1});
-    casadi::SX p2 = casadi::SX::vertcat({-2.5, 1});
-    casadi::SX p3 = casadi::SX::vertcat({-7,  -1});
-    casadi::SX p4 = casadi::SX::vertcat({-7,  1});
-
-    /** second bounding box */
-    casadi::SX q1 = casadi::SX::vertcat({2.5,-1});
-    casadi::SX q2 = casadi::SX::vertcat({2.5, 1});
-    casadi::SX q3 = casadi::SX::vertcat({7,  -1});
-    casadi::SX q4 = casadi::SX::vertcat({7,  1});
+    //int NumObs = 2;
+    casadi::SX obstacles = casadi::SX::sym("obs", NumObs * 4 * 2);
 
     /** robot vertices */
     casadi::SX r1 = casadi::SX::vertcat({1.2, -0.6});
@@ -316,57 +337,54 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
     casadi::SX th = spectral.CollocateFunction(th_f);
 
     int n_steps = PolyOrder * NumSegments + 1;
-    casadi::SX n1 = casadi::SX::sym("n", 2 * n_steps); // plane1 direction vector
-    casadi::SX b1 = casadi::SX::sym("b", n_steps);     // plane1 bias
+    casadi::SX n = casadi::SX::sym("n", 2 * n_steps * NumObs);
+    casadi::SX b = casadi::SX::sym("b", n_steps * NumObs);
 
-    casadi::SX n2 = casadi::SX::sym("n", 2 * n_steps); // plane2 direction vector
-    casadi::SX b2 = casadi::SX::sym("b", n_steps);     // plane2 bias
-    casadi::SX ineq_constr;
+    casadi::SX ineq_constr, eq_constr;
 
     /** set up the hyperplane constraints */
-    for(int i = 0; i < n_steps; ++i)
+    for (int j = 0; j < NumObs; ++j)
     {
-        int idx = i * 2;
-        casadi::Slice slice_i = casadi::Slice(idx, idx + 2);
-        /** compute the rotation matrix */
-        casadi::SX th_i = th(i);
-        casadi::SX col1 = casadi::SX::vertcat({cos(th_i), sin(th_i)});
-        casadi::SX col2 = casadi::SX::vertcat({-sin(th_i), cos(th_i)});
-        casadi::SX RX = casadi::SX::horzcat({col1,col2});
-        /** find root points wrt to parking place */
-        casadi::SX r1_w = casadi::SX::mtimes(RX, r1) + xy(slice_i);
-        casadi::SX r2_w = casadi::SX::mtimes(RX, r2) + xy(slice_i);
-        casadi::SX r3_w = casadi::SX::mtimes(RX, r3) + xy(slice_i);
-        casadi::SX r4_w = casadi::SX::mtimes(RX, r4) + xy(slice_i);
+        int obs_first = j * 2 * 4;
+        int obs_last = obs_first + 8;
+        //std::cout << "J: " << j << " " << "OBS_FST: " << obs_first << " " << "OBS_LAST: " << obs_last << "\n";
+        casadi::SX p = obstacles(casadi::Slice(obs_first, obs_last));
+
+        for(int i = 0; i < n_steps; ++i)
+        {
+            int idx = i * 2 + j * n_steps;
+            int idx_b = i + j * n_steps;
+            casadi::Slice slice_i = casadi::Slice(idx, idx + 2);
+            casadi::Slice slice_ir = casadi::Slice(i * 2, i * 2 + 2);
+            /** compute the rotation matrix */
+            casadi::SX th_i = th(i);
+            casadi::SX col1 = casadi::SX::vertcat({cos(th_i), sin(th_i)});
+            casadi::SX col2 = casadi::SX::vertcat({-sin(th_i), cos(th_i)});
+            casadi::SX RX = casadi::SX::horzcat({col1,col2});
+            /** find robot points wrt to parking place */
+            casadi::SX r1_w = casadi::SX::mtimes(RX, r1) + xy(slice_ir);
+            casadi::SX r2_w = casadi::SX::mtimes(RX, r2) + xy(slice_ir);
+            casadi::SX r3_w = casadi::SX::mtimes(RX, r3) + xy(slice_ir);
+            casadi::SX r4_w = casadi::SX::mtimes(RX, r4) + xy(slice_ir);
 
 
-        /** search for the first separating hyperplane */
-        casadi::SX cr1 = casadi::SX::dot(-n1(slice_i), r1_w) + b1(i);
-        casadi::SX cr2 = casadi::SX::dot(-n1(slice_i), r2_w) + b1(i);
-        casadi::SX cr3 = casadi::SX::dot(-n1(slice_i), r3_w) + b1(i);
-        casadi::SX cr4 = casadi::SX::dot(-n1(slice_i), r4_w) + b1(i);
+            /** search for the first separating hyperplane */
+            casadi::SX ni = n(slice_i);
+            casadi::SX bi = b(idx_b);
 
-        casadi::SX c2 = casadi::SX::dot(n1(slice_i), p1) - b1(i);
-        casadi::SX c3 = casadi::SX::dot(n1(slice_i), p2) - b1(i);
-        casadi::SX c4 = casadi::SX::dot(n1(slice_i), p3) - b1(i);
-        casadi::SX c5 = casadi::SX::dot(n1(slice_i), p4) - b1(i);
-        casadi::SX c6 = casadi::SX::dot(n1(slice_i), n1(slice_i)) - 1;
+            casadi::SX cr1 = casadi::SX::dot(-ni, r1_w) + bi;
+            casadi::SX cr2 = casadi::SX::dot(-ni, r2_w) + bi;
+            casadi::SX cr3 = casadi::SX::dot(-ni, r3_w) + bi;
+            casadi::SX cr4 = casadi::SX::dot(-ni, r4_w) + bi;
 
-        ineq_constr = casadi::SX::vertcat({ineq_constr, cr1, cr2, cr3, cr4, c2, c3, c4, c5, c6});
+            casadi::SX c2 = casadi::SX::dot(ni, p(casadi::Slice(0,2)) ) - bi;
+            casadi::SX c3 = casadi::SX::dot(ni, p(casadi::Slice(2,4)) ) - bi;
+            casadi::SX c4 = casadi::SX::dot(ni, p(casadi::Slice(4,6)) ) - bi;
+            casadi::SX c5 = casadi::SX::dot(ni, p(casadi::Slice(6,8)) ) - bi;
+            casadi::SX c6 = casadi::SX::dot(ni, ni) - 1;
 
-        /** search for the second separating hyperplane */
-        casadi::SX cr1_2 = casadi::SX::dot(-n2(slice_i), r1_w) + b2(i);
-        casadi::SX cr2_2 = casadi::SX::dot(-n2(slice_i), r2_w) + b2(i);
-        casadi::SX cr3_2 = casadi::SX::dot(-n2(slice_i), r3_w) + b2(i);
-        casadi::SX cr4_2 = casadi::SX::dot(-n2(slice_i), r4_w) + b2(i);
-
-        casadi::SX c2_2 = casadi::SX::dot(n2(slice_i), q1) - b2(i);
-        casadi::SX c3_2 = casadi::SX::dot(n2(slice_i), q2) - b2(i);
-        casadi::SX c4_2 = casadi::SX::dot(n2(slice_i), q3) - b2(i);
-        casadi::SX c5_2 = casadi::SX::dot(n2(slice_i), q4) - b2(i);
-        casadi::SX c6_2 = casadi::SX::dot(n2(slice_i), n2(slice_i)) - 1;
-
-        ineq_constr = casadi::SX::vertcat({ineq_constr, cr1_2, cr2_2, cr3_2, cr4_2, c2_2, c3_2, c4_2, c5_2, c6_2});
+            ineq_constr = casadi::SX::vertcat({ineq_constr, cr1, cr2, cr3, cr4, c2, c3, c4, c5, c6});
+        }
     }
 
     /** remove the initial point check */
@@ -382,10 +400,10 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
     ubg = casadi::SX::vertcat({ubg, upper});
 
     /** append optimization vector */
-    opt_var = casadi::SX::vertcat({opt_var, n1, b1, n2, b2});
-    casadi::SX plane_x0 = casadi::SX::zeros(2 * 3 * n_steps);
-    casadi::SX plane_lb = -casadi::SX::inf(2 * 3 * n_steps);
-    casadi::SX plane_ub = casadi::SX::inf(2 * 3 * n_steps);
+    opt_var = casadi::SX::vertcat({opt_var, n, b});
+    casadi::SX plane_x0 = casadi::SX::zeros(NumObs * 3 * n_steps);
+    casadi::SX plane_lb = -casadi::SX::inf(NumObs * 3 * n_steps);
+    casadi::SX plane_ub = casadi::SX::inf(NumObs * 3 * n_steps);
 
     lbx = casadi::SX::vertcat({lbx, plane_lb});
     ubx = casadi::SX::vertcat({ubx, plane_ub});
@@ -402,10 +420,11 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
     NLP["x"] = opt_var;
     NLP["f"] = performance_idx; //  1e-3 * casadi::SX::dot(diff_constr, diff_constr);
     NLP["g"] = diff_constr;
+    NLP["p"] = obstacles;
 
     /** default solver options */
     OPTS["ipopt.linear_solver"]         = "ma97";
-    OPTS["ipopt.print_level"]           = 1;
+    OPTS["ipopt.print_level"]           = 0;
     OPTS["ipopt.tol"]                   = 1e-4;
     OPTS["ipopt.acceptable_tol"]        = 1e-4;
     OPTS["ipopt.max_iter"]              = 150;
@@ -423,6 +442,9 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
     ARG["ubx"] = ubx;
     ARG["lbg"] = lbg;
     ARG["ubg"] = ubg;
+    //ARG["p"] = casadi::DM::zeros(obstacles.size1());
+    ARG["p"] = casadi::DM::vertcat({-2.5, -1, -2.5, 1, -7, -1, -7, 1,  2.5, -1, 2.5, 1, 7, -1, 7, 1});
+                                  //-2.5, -1, -2.5, 1, -7, -1, -7, 1,  2.5, -1, 2.5, 1, 7, -1, 7, 1
 
     casadi::DM feasible_state = casadi::DM::zeros(UBX.size());
     casadi::DM feasible_control = casadi::DM::zeros(UBU.size());
@@ -432,7 +454,7 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::createNLP(const casadi::Dict 
 }
 
 template<typename System, int NX, int NU, int NumSegments, int PolyOrder>
-void nmpc<System, NX, NU, NumSegments, PolyOrder>::computeControl(const casadi::DM &_X0)
+void nmpc<System, NX, NU, NumSegments, PolyOrder>::computeControl(const casadi::DM &_X0, const std::vector<Obstacle> &_obstacles)
 {
     int N = NUM_COLLOCATION_POINTS;
 
@@ -463,6 +485,29 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::computeControl(const casadi::
         ARG["ubx"](casadi::Slice(idx_in, idx_out), 0) = X0;
     }
 
+    /** read obstacles */
+    if(!_obstacles.empty())
+    {
+        std::vector<double> obstacles;
+        int obs_size = std::min(NumObs, _obstacles.size());
+        for(int i = 0; i < obs_size; ++i)
+        {
+            Obstacle ob = _obstacles.at(i);
+            Point p1 = ob.pc + ob.p1;
+            Point p2 = ob.pc + ob.p2;
+            Point p3 = ob.pc + ob.p3;
+            Point p4 = ob.pc + ob.p4;
+
+            obstacles.push_back(p1.x); obstacles.push_back(p1.y);
+            obstacles.push_back(p2.x); obstacles.push_back(p2.y);
+            obstacles.push_back(p3.x); obstacles.push_back(p3.y);
+            obstacles.push_back(p4.x); obstacles.push_back(p4.y);
+        }
+
+        ARG["p"] = casadi::DM(obstacles);
+        std::cout << "Received obstacles: " << ARG["p"] << "\n";
+    }
+
     /** store optimal solution */
     casadi::DMDict res = NLP_Solver(ARG);
     NLP_X     = res.at("x");
@@ -478,7 +523,7 @@ void nmpc<System, NX, NU, NumSegments, PolyOrder>::computeControl(const casadi::
     OptimalControl = casadi::DM::mtimes(invSU, casadi::DM::reshape(opt_u, NU, N + 1));
 
     stats = NLP_Solver.stats();
-    std::cout << stats << "\n";
+    std::cout << "status: " << stats["return_status"] << "  num_iterations: " << stats["iter_count"] << "\n";
 
     std::string solve_status = static_cast<std::string>(stats["return_status"]);
     if(solve_status.compare("Invalid_Number_Detected") == 0)
