@@ -99,19 +99,19 @@ KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh, const KiteProperties &k
 DM KiteNMPF_Node::convertToDM(const sensor_msgs::MultiDOFJointState &_value)
 {
     DM value = DM::zeros(13);
-    value[0] = _value.twist.back().linear.x;
-    value[1] = _value.twist.back().linear.y;
-    value[2] = _value.twist.back().linear.z;
-    value[3] = _value.twist.back().angular.x;
-    value[4] = _value.twist.back().angular.y;
-    value[5] = _value.twist.back().angular.z;
-    value[6] = _value.transforms.back().translation.x;
-    value[7] = _value.transforms.back().translation.y;
-    value[8] = _value.transforms.back().translation.z;
-    value[9] = _value.transforms.back().rotation.w;
-    value[10] = _value.transforms.back().rotation.x;
-    value[11] = _value.transforms.back().rotation.y;
-    value[12] = _value.transforms.back().rotation.z;
+    value(0) = _value.twist.back().linear.x;
+    value(1) = _value.twist.back().linear.y;
+    value(2) = _value.twist.back().linear.z;
+    value(3) = _value.twist.back().angular.x;
+    value(4) = _value.twist.back().angular.y;
+    value(5) = _value.twist.back().angular.z;
+    value(6) = _value.transforms.back().translation.x;
+    value(7) = _value.transforms.back().translation.y;
+    value(8) = _value.transforms.back().translation.z;
+    value(9) = _value.transforms.back().rotation.w;
+    value(10) = _value.transforms.back().rotation.x;
+    value(11) = _value.transforms.back().rotation.y;
+    value(12) = _value.transforms.back().rotation.z;
 
     return value;
 }

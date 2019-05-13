@@ -119,34 +119,34 @@ int main(void)
     UBP = DM::inf(21);
 
 
-    LBP[0] = REF_P[0] -  0.1 * fabs(REF_P[0]); UBP[0] = REF_P[0] +  0.1 * fabs(REF_P[0]); // CL0
-    LBP[1] = REF_P[1] - 0.05 * fabs(REF_P[1]); UBP[1] = REF_P[1] +  0.1 * fabs(REF_P[1]); // CLa
-    LBP[2] = REF_P[2] -  0.1 * fabs(REF_P[2]); UBP[2] = REF_P[2] + 0.25 * fabs(REF_P[2]); // CD0
-    LBP[3] = REF_P[3] -  0.5 * fabs(REF_P[3]); UBP[3] = REF_P[3] +  0.5 * fabs(REF_P[3]); // CYb
-    LBP[4] = REF_P[4] -  0.5 * fabs(REF_P[4]); UBP[4] = REF_P[4] +  0.5 * fabs(REF_P[4]); // Cm0
-    LBP[5] = REF_P[5] -  0.1 * fabs(REF_P[5]); UBP[5] = REF_P[5] + 0.30 * fabs(REF_P[5]); // Cma
-    LBP[6] = REF_P[6] -  0.5 * fabs(REF_P[6]); UBP[6] = REF_P[6] +  0.5 * fabs(REF_P[6]); // Cnb
-    LBP[7] = REF_P[7] -  0.5 * fabs(REF_P[7]); UBP[7] = REF_P[7] +  0.5 * fabs(REF_P[7]); // Clb
-    LBP[8] = REF_P[8] -  0.2 * fabs(REF_P[8]); UBP[8] = REF_P[8] +  0.2 * fabs(REF_P[8]); // CLq
-    LBP[9] = REF_P[9] -  0.3 * fabs(REF_P[9]); UBP[9] = REF_P[9] +  0.3 * fabs(REF_P[9]); // Cmq
+    LBP(0) = REF_P(0) - 0.1 * fabs(REF_P(0)); UBP(0) = REF_P(0) + 0.1 * fabs(REF_P(0)); // CL0
+    LBP(1) = REF_P(1) -0.05 * fabs(REF_P(1)); UBP(1) = REF_P(1) + 0.1 * fabs(REF_P(1)); // CLa
+    LBP(2) = REF_P(2) - 0.1 * fabs(REF_P(2)); UBP(2) = REF_P(2) +0.25 * fabs(REF_P(2)); // CD0
+    LBP(3) = REF_P(3) - 0.5 * fabs(REF_P(3)); UBP(3) = REF_P(3) + 0.5 * fabs(REF_P(3)); // CYb
+    LBP(4) = REF_P(4) - 0.5 * fabs(REF_P(4)); UBP(4) = REF_P(4) + 0.5 * fabs(REF_P(4)); // Cm0
+    LBP(5) = REF_P(5) - 0.1 * fabs(REF_P(5)); UBP(5) = REF_P(5) +0.30 * fabs(REF_P(5)); // Cma
+    LBP(6) = REF_P(6) - 0.5 * fabs(REF_P(6)); UBP(6) = REF_P(6) + 0.5 * fabs(REF_P(6)); // Cnb
+    LBP(7) = REF_P(7) - 0.5 * fabs(REF_P(7)); UBP(7) = REF_P(7) + 0.5 * fabs(REF_P(7)); // Clb
+    LBP(8) = REF_P(8) - 0.2 * fabs(REF_P(8)); UBP(8) = REF_P(8) + 0.2 * fabs(REF_P(8)); // CLq
+    LBP(9) = REF_P(9) - 0.3 * fabs(REF_P(9)); UBP(9) = REF_P(9) + 0.3 * fabs(REF_P(9)); // Cmq
 
-    LBP[10] = REF_P[10] -  0.3 * fabs(REF_P[10]); UBP[10] = REF_P[10] +  0.3 * fabs(REF_P[10]); // CYr
-    LBP[11] = REF_P[11] -  0.5 * fabs(REF_P[11]); UBP[11] = REF_P[11] +  0.5 * fabs(REF_P[11]); // Cnr
-    LBP[12] = REF_P[12] -  0.5 * fabs(REF_P[12]); UBP[12] = REF_P[12] +  0.5 * fabs(REF_P[12]); // Clr
-    LBP[13] = REF_P[13] -  0.5 * fabs(REF_P[13]); UBP[13] = REF_P[13] +  0.5 * fabs(REF_P[13]); // CYp
-    LBP[14] = REF_P[14] -  0.5 * fabs(REF_P[14]); UBP[14] = REF_P[14] +  0.5 * fabs(REF_P[14]); // Clp
-    LBP[15] = REF_P[15] -  0.3 * fabs(REF_P[15]); UBP[15] = REF_P[15] +  1.0 * fabs(REF_P[15]); // Cnp
-    LBP[16] = REF_P[16] -  0.5 * fabs(REF_P[16]); UBP[16] = REF_P[16] +  0.5 * fabs(REF_P[16]); // CLde
-    LBP[17] = REF_P[17] -  0.5 * fabs(REF_P[17]); UBP[17] = REF_P[17] +  0.5 * fabs(REF_P[17]); // CYdr
-    LBP[18] = REF_P[18] -  0.5 * fabs(REF_P[18]); UBP[18] = REF_P[18] +  0.5 * fabs(REF_P[18]); // Cmde
-    LBP[19] = REF_P[19] -  0.5 * fabs(REF_P[19]); UBP[19] = REF_P[19] +  0.5 * fabs(REF_P[19]); // Cndr
-    LBP[20] = REF_P[20] -  0.5 * fabs(REF_P[20]); UBP[20] = REF_P[20] +  0.5 * fabs(REF_P[20]); // Cldr
+    LBP(10) = REF_P(10) - 0.3 * fabs(REF_P(10)); UBP(10) = REF_P(10) + 0.3 * fabs(REF_P(10)); // CYr
+    LBP(11) = REF_P(11) - 0.5 * fabs(REF_P(11)); UBP(11) = REF_P(11) + 0.5 * fabs(REF_P(11)); // Cnr
+    LBP(12) = REF_P(12) - 0.5 * fabs(REF_P(12)); UBP(12) = REF_P(12) + 0.5 * fabs(REF_P(12)); // Clr
+    LBP(13) = REF_P(13) - 0.5 * fabs(REF_P(13)); UBP(13) = REF_P(13) + 0.5 * fabs(REF_P(13)); // CYp
+    LBP(14) = REF_P(14) - 0.5 * fabs(REF_P(14)); UBP(14) = REF_P(14) + 0.5 * fabs(REF_P(14)); // Clp
+    LBP(15) = REF_P(15) - 0.3 * fabs(REF_P(15)); UBP(15) = REF_P(15) + 1.0 * fabs(REF_P(15)); // Cnp
+    LBP(16) = REF_P(16) - 0.5 * fabs(REF_P(16)); UBP(16) = REF_P(16) + 0.5 * fabs(REF_P(16)); // CLde
+    LBP(17) = REF_P(17) - 0.5 * fabs(REF_P(17)); UBP(17) = REF_P(17) + 0.5 * fabs(REF_P(17)); // CYdr
+    LBP(18) = REF_P(18) - 0.5 * fabs(REF_P(18)); UBP(18) = REF_P(18) + 0.5 * fabs(REF_P(18)); // Cmde
+    LBP(19) = REF_P(19) - 0.5 * fabs(REF_P(19)); UBP(19) = REF_P(19) + 0.5 * fabs(REF_P(19)); // Cndr
+    LBP(20) = REF_P(20) - 0.5 * fabs(REF_P(20)); UBP(20) = REF_P(20) + 0.5 * fabs(REF_P(20)); // Cldr
 
-    // LBP[21] = 2.65;    UBP[21] = 2.75;   // tether length
-    // LBP[22] = 150.0;  UBP[22] = 150.0;  // Ks
-    // LBP[23] = 0.0;    UBP[23] = 10;   // Kd
-    // LBP[24] = 0.0;    UBP[24] = 0.0;   // rx
-    // LBP[25] = 0.0;    UBP[25] = 0.0;  // rz
+    // LBP(21] = 2.65;    UBP(21] = 2.75;   // tether length
+    // LBP(22] = 150.0;  UBP(22] = 150.0;  // Ks
+    // LBP(23] = 0.0;    UBP(23] = 10;   // Kd
+    // LBP(24] = 0.0;    UBP(24] = 0.0;   // rx
+    // LBP(25] = 0.0;    UBP(25] = 0.0;  // rz
 
     std::cout << "OK so far \n";
 
@@ -196,7 +196,7 @@ int main(void)
     {
         SX measurement = id_data(Slice(0, id_data.size1()), j);
         SX error = measurement - varx_(Slice(0, varx_.size1()), varx_.size2() - j - 1);
-        fitting_error += static_cast<double>(1.0 / DATA_POINTS) * SX::sumRows( SX::mtimes(Q, pow(error, 2)) );
+        fitting_error += static_cast<double>(1.0 / DATA_POINTS) * SX::sum1( SX::mtimes(Q, pow(error, 2)) );
     }
 
     /** add regularisation */

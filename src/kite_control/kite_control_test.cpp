@@ -29,7 +29,7 @@ BOOST_AUTO_TEST_CASE( integrator_test )
                               -0.229383, -0.0500282, -0.746832, 0.189409, -0.836349, -0.48178, 0.180367});
 
     DM dynamics = fDynamics(DMVector{init_state});
-    std::cout << "Dynamics: " << dynamics[0] << "\n";
+    std::cout << "Dynamics: " << dynamics(0) << "\n";
 
     DM control = DM::zeros(3);
     //DMDict args = {{"x0", init_state}, {"p", control}};
@@ -152,8 +152,8 @@ BOOST_AUTO_TEST_CASE( lqr_test )
 SX ode(const SX &x, const SX &u, const SX &p)
 {
     SX f = SX::zeros(2,1);
-    f[0] = x[1] + u[0];
-    f[1] = u[1];
+    f(0) = x(1) + u(0);
+    f(1) = u(1);
 
     return f;
 }
@@ -175,7 +175,7 @@ BOOST_AUTO_TEST_CASE( pseudo_test )
 
     SX x = SX::sym("x", 2);
     SX u = SX::sym("u", 2);
-    SX f = SX::vertcat({x[1] + u[0], u[1]});
+    SX f = SX::vertcat({x(1) + u(0), u(1)});
     std::cout << "F : " << f << "\n";
     Function dynamics = Function("rhs", {x, u}, {f});
     std::cout << "X var : " << cheb.VarX() << "\n";
@@ -522,13 +522,13 @@ BOOST_AUTO_TEST_CASE( full_generics_test )
     SX x = SX::sym("x", dimx);
     SX u = SX::sym("u", dimu);
 
-    SXVector tmp = PathFunc(SXVector{x[13]});
+    SXVector tmp = PathFunc(SXVector{x(13)});
     SX sym_path  = tmp[0];
     SX residual  = sym_path - x(Slice(6,9));
-    SX lagrange  = SX::sumRows( SX::mtimes(Q, pow(residual, 2)) ) + SX::sumRows( SX::mtimes(W, pow(reference_velocity - x[14], 2)) );
+    SX lagrange  = SX::sum1( SX::mtimes(Q, pow(residual, 2)) ) + SX::sum1( SX::mtimes(W, pow(reference_velocity - x(14), 2)) );
     Function LagrangeTerm = Function("Lagrange", {x, u}, {lagrange});
 
-    SX mayer     =  SX::sumRows( SX::mtimes(2 * Q, pow(residual, 2)) );
+    SX mayer     =  SX::sum1( SX::mtimes(2 * Q, pow(residual, 2)) );
     Function MayerTerm    = Function("Mayer",{x}, {mayer});
     SX performance_idx = spectral.CollocateCost(MayerTerm, LagrangeTerm, 0, 1);
 

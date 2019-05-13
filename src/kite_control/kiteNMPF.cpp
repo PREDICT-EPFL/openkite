@@ -117,28 +117,28 @@ void KiteNMPF::createNLP()
     SX lagrange, residual;
     if(scale)
     {
-        SXVector tmp = PathFunc(SXVector{SX::mtimes(invSX(13,13), x[13])});
+        SXVector tmp = PathFunc(SXVector{SX::mtimes(invSX(13,13), x(13))});
         SX sym_path  = tmp[0];
         residual  = SX::mtimes(Scale_X(Slice(6,9), Slice(6,9)), sym_path) - x(Slice(6,9));
-        lagrange  = SX::sumRows( SX::mtimes(Q, pow(residual, 2)) ) + SX::sumRows( SX::mtimes(W, pow(reference_velocity - x[14], 2)) );
-        lagrange = lagrange + SX::sumRows( SX::mtimes(R, pow(u, 2)) );
+        lagrange  = SX::sum1( SX::mtimes(Q, pow(residual, 2)) ) + SX::sum1( SX::mtimes(W, pow(reference_velocity - x(14), 2)) );
+        lagrange = lagrange + SX::sum1( SX::mtimes(R, pow(u, 2)) );
     }
     else
     {
-        SXVector tmp = PathFunc(SXVector{x[13]});
+        SXVector tmp = PathFunc(SXVector{x(13)});
         SX sym_path  = tmp[0];
         residual  = sym_path - x(Slice(6,9));
-        lagrange  = SX::sumRows( SX::mtimes(Q, pow(residual, 2)) ) + SX::sumRows( SX::mtimes(W, pow(reference_velocity - x[14], 2)) );
-        lagrange = lagrange + SX::sumRows( SX::mtimes(R, pow(u, 2)) );
+        lagrange  = SX::sum1( SX::mtimes(Q, pow(residual, 2)) ) + SX::sum1( SX::mtimes(W, pow(reference_velocity - x(14), 2)) );
+        lagrange = lagrange + SX::sum1( SX::mtimes(R, pow(u, 2)) );
     }
 
     Function LagrangeTerm = Function("Lagrange", {x, u}, {lagrange});
 
     /** trace functions */
     PathError = Function("PathError", {x}, {residual});
-    VelError  = Function("VelError", {x}, {reference_velocity - x[14]});
+    VelError  = Function("VelError", {x}, {reference_velocity - x(14)});
 
-    SX mayer     =  SX::sumRows( SX::mtimes(Q, pow(residual, 2)) );
+    SX mayer     =  SX::sum1( SX::mtimes(Q, pow(residual, 2)) );
     Function MayerTerm    = Function("Mayer",{x}, {mayer});
     SX performance_idx = spectral.CollocateCost(MayerTerm, LagrangeTerm, 0.0, tf);
 
@@ -209,14 +209,14 @@ void KiteNMPF::computeControl(const DM &_X0)
     DM X0 = _X0;
     //std::cout << "theta : before :" << X0[13] << " ";
     bool rectify = false;
-    if(X0[13].nonzeros()[0] > 2 * M_PI)
+    if(X0(13).nonzeros()[0] > 2 * M_PI)
     {
-        X0[13] -= 2 * M_PI;
+        X0(13) -= 2 * M_PI;
         rectify = true;
     }
-    else if (X0[13].nonzeros()[0] < -2 * M_PI)
+    else if (X0(13).nonzeros()[0] < -2 * M_PI)
     {
-        X0[13] += 2 * M_PI;
+        X0(13) += 2 * M_PI;
         rectify = true;
     }
 
@@ -236,11 +236,11 @@ void KiteNMPF::computeControl(const DM &_X0)
 
         /** relax virtual state constraint */
         idx_theta = idx_out - 2;
-        ARG["lbx"](idx_theta) = X0[13] - flexibility;
-        ARG["ubx"](idx_theta) = X0[13] + flexibility;
+        ARG["lbx"](idx_theta) = X0(13) - flexibility;
+        ARG["ubx"](idx_theta) = X0(13) + flexibility;
 
-        ARG["lbx"](idx_theta + 1) = X0[14] - flexibility;
-        ARG["ubx"](idx_theta + 1) = X0[14] + flexibility;
+        ARG["lbx"](idx_theta + 1) = X0(14) - flexibility;
+        ARG["ubx"](idx_theta + 1) = X0(14) + flexibility;
 
         /** rectify initial guess */
         if(rectify)
@@ -248,10 +248,10 @@ void KiteNMPF::computeControl(const DM &_X0)
             for(int i = 0; i < (N + 1) * nx; i += nx)
             {
                 int idx = i + 13;
-                if(NLP_X[idx].nonzeros()[0] > critical_val)
-                    NLP_X[idx] -= critical_val;
-                else if (NLP_X[idx].nonzeros()[0] < -critical_val)
-                    NLP_X[idx] += critical_val;
+                if(NLP_X(idx).nonzeros()[0] > critical_val)
+                    NLP_X(idx) -= critical_val;
+                else if (NLP_X(idx).nonzeros()[0] < -critical_val)
+                    NLP_X(idx) += critical_val;
             }
         }
         ARG["x0"]     = NLP_X;
@@ -268,11 +268,11 @@ void KiteNMPF::computeControl(const DM &_X0)
 
         /** relax virtual state constraint */
         idx_theta = idx_out - 2;
-        ARG["lbx"](idx_theta) = X0[13] - flexibility;
-        ARG["ubx"](idx_theta) = X0[13] + flexibility;
+        ARG["lbx"](idx_theta) = X0(13) - flexibility;
+        ARG["ubx"](idx_theta) = X0(13) + flexibility;
 
-        ARG["lbx"](idx_theta + 1) = X0[14] - flexibility;
-        ARG["ubx"](idx_theta + 1) = X0[14] + flexibility;
+        ARG["lbx"](idx_theta + 1) = X0(14) - flexibility;
+        ARG["ubx"](idx_theta + 1) = X0(14) + flexibility;
     }
 
     //DMVector dbg_prf    = PerformanceIndex({ARG["x0"]});

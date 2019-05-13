@@ -106,7 +106,7 @@ int main()
     Eigen::VectorXd eig_vec = Eigen::VectorXd::Map(c.nonzeros().data(), c.nonzeros().size());
     std::cout << eig_vec << "\n";
 
-    std::cout << DM::sumRows(c) << "\n";
+    std::cout << DM::sum1(c) << "\n";
 
     DM EYE = DM::eye(7);
     Eigen::Matrix<double, 7, 7> eig_mat = Eigen::Matrix<double, 7, 7>::Map(DM::densify(EYE).nonzeros().data(), 7, 7);
@@ -137,7 +137,7 @@ int main()
     std::cout << "Nonzeros in rows: " << SpA.get_row() << "\n";
     std::cout << "Nonzeros in columns: " << SpA.get_colind() << "\n";
 
-    std::vector<int> output_row, output_col;
+    std::vector<casadi_int> output_row, output_col;
     SpA.get_triplet(output_row, output_col);
     std::vector<double> values = Matrx.get_nonzeros();
 

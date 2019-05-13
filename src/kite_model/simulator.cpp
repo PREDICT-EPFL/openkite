@@ -4,9 +4,9 @@ using namespace casadi;
 
 void Simulator::controlCallback(const openkite::aircraft_controls::ConstPtr &msg)
 {
-    controls[0] = msg->thrust;
-    controls[1] = msg->elevator;
-    controls[2] = msg->rudder;
+    controls(0) = msg->thrust;
+    controls(1) = msg->elevator;
+    controls(2) = msg->rudder;
 }
 
 Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
