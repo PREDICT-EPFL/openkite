@@ -67,6 +67,8 @@ struct PlaneAerodynamics
     double Cndr;
     double Cldr;
     double CDde;
+    double Clda;
+    double Cnda;
 };
 
 struct TetherProperties

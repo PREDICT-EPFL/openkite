@@ -64,6 +64,8 @@ namespace kite_utils
         props.Aerodynamics.Cndr = config["aerodynamic"]["Cndr"].as<double>();
         props.Aerodynamics.Cldr = config["aerodynamic"]["Cldr"].as<double>();
         props.Aerodynamics.CDde = config["aerodynamic"]["CDde"].as<double>();
+        props.Aerodynamics.Cnda = config["aerodynamic"]["Cnda"].as<double>();
+        props.Aerodynamics.Clda = config["aerodynamic"]["Clda"].as<double>();
 
         props.Tether.length = config["tether"]["length"].as<double>();
         props.Tether.Ks     = config["tether"]["Ks"].as<double>();
@@ -203,6 +205,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     double Cmde = KiteProps.Aerodynamics.Cmde;
     double Cndr = KiteProps.Aerodynamics.Cndr;
     double Cldr = KiteProps.Aerodynamics.Cldr;
+    double Cnda = KiteProps.Aerodynamics.Cnda;
+    double Clda = KiteProps.Aerodynamics.Clda;
     //double CDde = KiteProps.Aerodynamics.CDde;
 
     //double CL_daoa = -2 * CLa_t * Vh * dw;
@@ -233,16 +237,24 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX T = SX::sym("T");   /** propeller propulsion : applies along X-axis in BRF [N] **/
     SX dE = SX::sym("dE"); /** elevator deflection [positive down] [rad]              **/
     SX dR = SX::sym("dR"); /** rudder deflection [rad]                                **/
-    //SX dA = SX::sym("dA"); /** aileron deflection [reserved, but not used] [rad]      **/
+    SX dA = SX::sym("dA"); /** aileron deflection [rad]      **/
     //SX dF = SX::sym("dF"); /** flaps deflection [reserved, but not used]               **/
 
 
     /** @todo: add wind to the model **/
-    SX V = SX::norm_2(v);
-    SX V2 = SX::dot(v, v);
+    SX WS = SX::sym("WS",3);
+    WS = SX::vertcat({0,0,0});
+    SX qWS = kmath::quat_multiply(kmath::quat_inverse(q),
+                                              SX::vertcat({0,WS}));
+    SX qWS_q = kmath::quat_multiply(qWS, q);
+    SX WS_b = qWS_q(Slice(1,4), 0);
 
-    SX ss = asin(v(1) / (V + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
-    SX aoa = atan2(v(2) , (v(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
+    SX Va = v - WS_b;
+    SX V = SX::norm_2(Va);
+    SX V2 = SX::dot(Va, Va);
+
+    SX ss = asin(Va(1) / (V + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
+    SX aoa = atan2(Va(2) , (Va(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX dyn_press = 0.5 * ro * V2;         /** dynamic pressure **/
 
     SX CD = CD0_tot + pow(CL0 + CLa_tot * aoa, 2) / (pi * e_o * AR); /** total drag coefficient **/
@@ -316,7 +328,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** Dynamic Equation: Moments */
     /** ------------------------- */
     /** Rolling Aerodynamic Moment */
-    SX L = (Cl0 + Clb * ss + Cldr * dR) * dyn_press * S * b +
+    SX L = (Cl0 + Clb * ss + Cldr * dR + Clda * dA) * dyn_press * S * b +
                    (Clr * w(2) + Clp * w(0)) * (0.25 * ro * std::pow(b, 2) * S) * V;
 
     /** Pitching Aerodynamic Moment */
@@ -324,7 +336,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
                     Cmq * (0.25 * S * std::pow(c, 2) * ro) * w(1) * V;
 
     /** Yawing Aerodynamic Moment */
-    SX N = (Cn0 + Cnb * ss + Cndr * dR) * dyn_press * S * b +
+    SX N = (Cn0 + Cnb * ss + Cndr * dR + Cnda * dA) * dyn_press * S * b +
                    (Cnp * w(0) + Cnr * w(2)) * (0.25 * S * std::pow(b, 2) * ro) * V;
 
     /** Aircraft Inertia Matrix */
@@ -364,7 +376,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 
     /** Complete dynamics of the Kite */
     auto state = SX::vertcat({v, w, r, q});
-    auto control = SX::vertcat({T, dE, dR});
+    auto control = SX::vertcat({T, dE, dR, dA});
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
     Function dyn_func = Function("dynamics", {state, control}, {dynamics});
@@ -464,6 +476,9 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX Cndr = SX::sym("Cndr");
     SX Cldr = SX::sym("Cldr");
 
+    SX Clda = SX::sym("Clda");
+    SX Cnda = SX::sym("Cnda");
+
     /** ------------------------------ **/
     /**        Tether parameters       **/
     /** ------------------------------ **/
@@ -499,13 +514,21 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX T  = SX::sym("T");   /** propeller propulsion : applies along X-axis in BRF [N] **/
     SX dE = SX::sym("dE"); /** elevator deflection [positive down] [rad]              **/
     SX dR = SX::sym("dR"); /** rudder deflection [rad]                                **/
+    SX dA = SX::sym("dA"); /** aileron deflection [rad] */
 
-    /** @todo: add wind to the model **/
-    SX V = SX::norm_2(v);
-    SX V2 = SX::dot(v, v);
+    SX WS = SX::sym("WS",3);
+    WS = SX::vertcat({0,0,0});
+    SX qWS = kmath::quat_multiply(kmath::quat_inverse(q),
+                                              SX::vertcat({0,WS}));
+    SX qWS_q = kmath::quat_multiply(qWS, q);
+    SX WS_b = qWS_q(Slice(1,4), 0);
 
-    SX ss = asin(v(1) / V);       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
-    SX aoa = atan2(v(2) , v(0));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
+    SX Va = v - WS_b;
+    SX V = SX::norm_2(Va);
+    SX V2 = SX::dot(Va, Va);
+
+    SX ss = asin(Va(1) / (V + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
+    SX aoa = atan2(Va(2) , (Va(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX dyn_press = 0.5 * ro * V2;         /** dynamic pressure **/
 
     SX CD = CD0_tot + pow(CL0 + CLa_tot * aoa, 2) / (pi * e_o * AR); /** total drag coefficient **/
@@ -576,7 +599,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** Dynamic Equation: Moments */
     /** ------------------------- */
     /** Rolling Aerodynamic Moment */
-    SX L = (Cl0 + Clb * ss + Cldr * dR) * dyn_press * S * b +
+    SX L = (Cl0 + Clb * ss + Cldr * dR + Clda * dA) * dyn_press * S * b +
                    (Clr * w(2) + Clp * w(0)) * (0.25 * ro * std::pow(b, 2) * S) * V;
 
     /** Pitching Aerodynamic Moment */
@@ -584,7 +607,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
                     Cmq * (0.25 * S * std::pow(c, 2) * ro) * w(1) * V;
 
     /** Yawing Aerodynamic Moment */
-    SX N = (Cn0 + Cnb * ss + Cndr * dR) * dyn_press * S * b +
+    SX N = (Cn0 + Cnb * ss + Cndr * dR + Cnda * dA) * dyn_press * S * b +
                    (Cnp * w(0) + Cnr * w(2)) * (0.25 * S * std::pow(b, 2) * ro) * V;
 
     /** Aircraft Inertia Matrix */
@@ -623,7 +646,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 
     /** Complete dynamics of the Kite */
     auto state = SX::vertcat({v, w, r, q});
-    auto control = SX::vertcat({T, dE, dR});
+    auto control = SX::vertcat({T, dE, dR, dA});
     auto params  = SX::vertcat({CL0, CLa_tot, CD0_tot, CYb, Cm0, Cma, Cnb, Clb, CLq, Cmq,
                                 CYr, Cnr, Clr, CYp, Clp, Cnp, CLde, CYdr, Cmde, Cndr, Cldr, Lt, Ks, Kd, rx, rz});
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
