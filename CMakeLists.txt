@@ -13,7 +13,7 @@ find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs message_generation
                                         visualization_msgs serial)
 find_package(VRPN REQUIRED)
 find_package(CASADI REQUIRED)
-find_package(yaml-cpp 0.5.3 REQUIRED)
+find_package(yaml-cpp 0.5 REQUIRED)
 
 if(APPLE)
   ##Due to warnings raised in CasADi
