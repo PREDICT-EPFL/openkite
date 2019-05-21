@@ -274,7 +274,7 @@ symbolic_psarc<Equalities, CorrectorProps>::symbolic_psarc(const typename Equali
             r = factor * r;
         }
 
-        casadi::DM l_dot = 1.0 / std::sqrtf(1 + casadi::DM::dot(r,r).nonzeros()[0]);
+        casadi::DM l_dot = 1.0 / sqrt(1 + casadi::DM::dot(r,r).nonzeros()[0]);
 
         if(iter_count == 0)
         {
