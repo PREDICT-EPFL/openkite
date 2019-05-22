@@ -593,7 +593,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 
     /** Total external forces devided by glider's mass (linear acceleration) */
     /** @todo : ADD TETHER FORCE */
-    auto v_dot = (Faero_b + T_b + R_b)/Mass + G_b - SX::cross(w,v);
+    // auto v_dot = (Faero_b + T_b + R_b)/Mass + G_b - SX::cross(w,v);
+    auto v_dot = (Faero_b + T_b)/Mass + G_b - SX::cross(w,v);
 
     /** ------------------------- */
     /** Dynamic Equation: Moments */
