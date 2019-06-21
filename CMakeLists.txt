@@ -13,12 +13,12 @@ find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs message_generation
                                         visualization_msgs serial)
 find_package(VRPN REQUIRED)
 find_package(CASADI REQUIRED)
-find_package(yaml-cpp 0.5 REQUIRED)
+find_package(yaml-cpp 0.6 REQUIRED)
 
 if(APPLE)
   ##Due to warnings raised in CasADi
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -O3")
-  set(YAML_CPP_LIBS /usr/local/lib/libyaml-cpp.0.5.3.dylib)
+  #set(YAML_CPP_LIBS /usr/local/lib/libyaml-cpp.0.5.3.dylib)
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -O3")
   set(YAML_CPP_LIBS yaml-cpp)
@@ -44,7 +44,7 @@ endif()
 #endif()
 
 ## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+find_package(Boost REQUIRED COMPONENTS system signals)
 
 
 ## Uncomment this if the package has a setup.py. This macro ensures
@@ -140,23 +140,9 @@ catkin_package(
 include_directories(src/kite_model src/nodes src/kite_control src/kite_estimation src/kite_math
                     ${catkin_INCLUDE_DIRS} ${VRPN_INCLUDE_DIR} ${CASADI_INCLUDE_DIR} ${YAML_CPP_INCLUDE_DIR})
 
-## Declare a C++ library
-#add_library(opt_ctl src/${PROJECT_NAME}/openkite.cpp )
-
-## Add cmake target dependencies of the library
-## as an example, code may need to be generated before libraries
-## either from message generation or dynamic reconfigure
-# add_dependencies(openkite ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
 ## Declare a C++ executable
 add_executable(casadi_test src/casadi_test.cpp)
-#add_executable(lidar_driver src/lidar_driver.cpp)
-
-## Add cmake target dependencies of the executable
-## same as for the library above
-# add_dependencies(openkite ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-
-## Specify libraries to link a library or executable target against
 target_link_libraries(casadi_test ${CASADI_LIBRARIES} ${YAML_CPP_LIBS} ${catkin_LIBRARIES})
 #target_link_libraries(lidar_driver ${catkin_LIBRARIES})
 

@@ -388,7 +388,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     AeroDynamics = Function("Aero",{state, control},{Faero_b});
     /** define RK4 integrator scheme */
     SX X = SX::sym("X", 13);
-    SX U = SX::sym("U", 3);
+    SX U = SX::sym("U", 4);
     SX dT = SX::sym("dT");
 
     /** get symbolic expression for RK4 integrator */

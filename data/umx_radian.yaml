@@ -59,3 +59,6 @@ tether:
     length:      2.81            # tether length
     Ks:          0.66            # spring coefficient
     Kd:          0.44            # damping coefficient
+    rx:          0.0
+    ry:          0.0
+    rz:          0.0
