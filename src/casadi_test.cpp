@@ -104,7 +104,7 @@ int main()
     Eigen::VectorXd eig_vec = Eigen::VectorXd::Map(c.nonzeros().data(), c.nonzeros().size());
     std::cout << eig_vec << "\n";
 
-    std::cout << DM::sumRows(c) << "\n";
+    std::cout << DM::sum1(c) << "\n";
 
     DM EYE = DM::eye(7);
     Eigen::Matrix<double, 7, 7> eig_mat = Eigen::Matrix<double, 7, 7>::Map(DM::densify(EYE).nonzeros().data(), 7, 7);

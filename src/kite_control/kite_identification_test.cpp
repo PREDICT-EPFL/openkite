@@ -198,7 +198,7 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     {
         SX measurement = id_data(Slice(0, id_data.size1()), j);
         SX error = measurement - varx_(Slice(0, varx_.size1()), varx_.size2() - j - 1);
-        fitting_error = fitting_error + (1 / DATA_POINTS) * SX::sumRows( SX::mtimes(Q, pow(error, 2)) );
+        fitting_error = fitting_error + (1 / DATA_POINTS) * SX::sum1( SX::mtimes(Q, pow(error, 2)) );
     }
 
     /** add regularisation */
@@ -207,7 +207,7 @@ BOOST_AUTO_TEST_CASE( first_id_test )
     /** alternative approximation */
     SX x = SX::sym("x",13);
     SX y = SX::sym("y",13);
-    SX cost_function = SX::sumRows( SX::mtimes(Q, pow(x - y, 2)) );
+    SX cost_function = SX::sum1( SX::mtimes(Q, pow(x - y, 2)) );
     Function IdCost = Function("IdCost",{x,y}, {cost_function});
     SX fitting_error2 = spectral.CollocateIdCost(IdCost, id_data, 0, tf);
     fitting_error2 = fitting_error2 + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
