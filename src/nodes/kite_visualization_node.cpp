@@ -396,7 +396,7 @@ int main( int argc, char** argv )
     {
         DMVector res = path_fun( DMVector{DM(alpha)} );
         DM sphere_point = res[0];
-        DM point = kmath::spheric2cart<DM>(sphere_point[1], sphere_point[0], sphere_point[2]);
+        DM point = kmath::spheric2cart<DM>(sphere_point(1), sphere_point(0), sphere_point(2));
 
         geometry_msgs::Point p;
         p.x = point.nonzeros()[0];

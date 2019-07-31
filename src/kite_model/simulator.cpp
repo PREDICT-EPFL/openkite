@@ -4,14 +4,14 @@ using namespace casadi;
 
 void Simulator::controlCallback(const openkite::aircraft_controls::ConstPtr &msg)
 {
-    controls[0] = msg->thrust;
-    controls[1] = msg->elevator;
-    controls[2] = msg->rudder;
+    controls(0) = msg->thrust;
+    controls(1) = msg->elevator;
+    controls(2) = msg->rudder;
 }
 
 void Simulator::simple_controlCallback(const openkite::aircraft_controls::ConstPtr &msg)
 {
-    controls[0] = msg->rudder;
+    controls(0) = msg->rudder;
 }
 
 Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
@@ -60,7 +60,7 @@ void Simulator::publish_state()
 {
     DM state = getState();
     DM L = 5;
-    DM pose = kmath::spheric2cart<DM>(state[1], state[0], L);
+    DM pose = kmath::spheric2cart<DM>(state(1), state(0), L);
     std::vector<double> pose_vec = pose.nonzeros();
     msg_state.header.stamp = ros::Time::now();
 
@@ -68,9 +68,9 @@ void Simulator::publish_state()
     msg_state.twist[0].linear.y = 0;
     msg_state.twist[0].linear.z = 0;
 
-    msg_state.twist[0].angular.x = static_cast<double>(state[0]);
-    msg_state.twist[0].angular.y = static_cast<double>(state[1]);
-    msg_state.twist[0].angular.z = static_cast<double>(state[2]);
+    msg_state.twist[0].angular.x = static_cast<double>(state(0));
+    msg_state.twist[0].angular.y = static_cast<double>(state(1));
+    msg_state.twist[0].angular.z = static_cast<double>(state(2));
 
     msg_state.transforms[0].translation.x = pose_vec[0];
     msg_state.transforms[0].translation.y = pose_vec[1];
@@ -89,7 +89,7 @@ void Simulator::publish_pose()
 {
     DM state = getState();
     DM L = 5;
-    DM pose = kmath::spheric2cart<DM>(state[1], state[0], L);
+    DM pose = kmath::spheric2cart<DM>(state(1), state(0), L);
     std::vector<double> pose_vec = pose.nonzeros();
 
     geometry_msgs::PoseStamped msg_pose;
