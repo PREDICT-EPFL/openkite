@@ -134,13 +134,13 @@ void KiteEKF_Node::initialize()
 DM KiteEKF_Node::convertToDM(const geometry_msgs::PoseStamped &_value)
 {
     DM value = DM::zeros(7);
-    value[0] = _value.pose.position.x;
-    value[1] = _value.pose.position.y;
-    value[2] = _value.pose.position.z;
-    value[3] = _value.pose.orientation.w;
-    value[4] = _value.pose.orientation.x;
-    value[5] = _value.pose.orientation.y;
-    value[6] = _value.pose.orientation.z;
+    value(0) = _value.pose.position.x;
+    value(1) = _value.pose.position.y;
+    value(2) = _value.pose.position.z;
+    value(3) = _value.pose.orientation.w;
+    value(4) = _value.pose.orientation.x;
+    value(5) = _value.pose.orientation.y;
+    value(6) = _value.pose.orientation.z;
 
     return value;
 }

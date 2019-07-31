@@ -96,9 +96,9 @@ namespace kmath
     BaseClass spheric2cart(const BaseClass &azimuth, const BaseClass &elevation, const BaseClass &radius)
     {
         BaseClass cart_coord = BaseClass::zeros(3,1);
-        cart_coord[0] = radius * cos(elevation) * cos(azimuth);
-        cart_coord[1] = radius * cos(elevation) * sin(azimuth);
-        cart_coord[2] = radius * sin(elevation);
+        cart_coord(0) = radius * cos(elevation) * cos(azimuth);
+        cart_coord(1) = radius * cos(elevation) * sin(azimuth);
+        cart_coord(2) = radius * sin(elevation);
 
         return cart_coord;
     }
