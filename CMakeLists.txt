@@ -13,12 +13,15 @@ find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs message_generation
                                         visualization_msgs serial)
 find_package(VRPN REQUIRED)
 find_package(CASADI REQUIRED)
-find_package(yaml-cpp 0.5.3 REQUIRED)
+#find_package(yaml-cpp  REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(YAML_CPP REQUIRED yaml-cpp)
+
 
 if(APPLE)
   ##Due to warnings raised in CasADi
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -O3")
-  set(YAML_CPP_LIBS /usr/local/lib/libyaml-cpp.0.5.3.dylib)
+  set(YAML_CPP_LIBS yaml-cpp)
 else()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -O3")
   set(YAML_CPP_LIBS yaml-cpp)
@@ -138,7 +141,7 @@ catkin_package(
 ## Your package locations should be listed before other locations
 
 include_directories(src/kite_model src/nodes src/kite_control src/kite_estimation src/kite_math
-                    ${catkin_INCLUDE_DIRS} ${VRPN_INCLUDE_DIR} ${CASADI_INCLUDE_DIR} ${YAML_CPP_INCLUDE_DIR})
+                    ${catkin_INCLUDE_DIRS} ${VRPN_INCLUDE_DIR} ${CASADI_INCLUDE_DIR} ${YAML_CPP_INCLUDEDIR})
 
 ## Declare a C++ library
 #add_library(opt_ctl src/${PROJECT_NAME}/openkite.cpp )
