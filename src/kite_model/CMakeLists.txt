@@ -18,3 +18,9 @@ target_link_libraries(simulator kitemodel odesolver ${catkin_LIBRARIES})
 
 add_dependencies(simulator openkite_generate_messages_cpp)
 
+install(TARGETS simulator
+        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+        )
+

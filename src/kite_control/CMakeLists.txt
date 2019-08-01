@@ -16,3 +16,9 @@ add_executable(nmpf_node nmpf_node.cpp nmpf_node.hpp)
 target_link_libraries(nmpf_node kiteNMPF odesolver ${catkin_LIBRARIES})
 
 add_dependencies(nmpf_node openkite_generate_messages_cpp)
+
+install(TARGETS nmpf_node
+        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+        RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+        )
