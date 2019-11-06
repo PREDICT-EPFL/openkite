@@ -12,39 +12,39 @@
 using namespace casadi;
 using namespace kmath;
 
-struct Scale
-{
+struct Scale {
     float x;
     float y;
     float z;
 
-    Scale(const float &_x=1, const float &_y=1, const float &_z=1) : x(_x), y(_y), z(_z) {}
-    virtual ~Scale(){}
+    Scale(const float &_x = 1, const float &_y = 1, const float &_z = 1) : x(_x), y(_y), z(_z) {}
+
+    virtual ~Scale() {}
 };
 
-struct Color
-{
+struct Color {
     float r;
     float g;
     float b;
     float transparency;
 
-    Color(const float &_r=0, const float &_g=0, const float &_b=1, const float &_t=0) : r(_r), g(_g), b(_b), transparency(_t){}
-    virtual ~Color(){}
+    Color(const float &_r = 0, const float &_g = 0, const float &_b = 1, const float &_t = 0) : r(_r), g(_g), b(_b),
+                                                                                                transparency(_t) {}
+
+    virtual ~Color() {}
 };
 
-struct MarkerProperties
-{
-    int         type;
-    int         id;
-    int         action;
+struct MarkerProperties {
+    int type;
+    int id;
+    int action;
     std::string frame_id;
     std::string ns;
     std::string mesh_resource;
-    Scale       scale;
-    Color       color;
+    Scale scale;
+    Color color;
 
-    geometry_msgs::Point      position;
+    geometry_msgs::Point position;
     geometry_msgs::Quaternion orientation;
 
     MarkerProperties() : type(visualization_msgs::Marker::SPHERE),
@@ -54,8 +54,7 @@ struct MarkerProperties
                          ns("awe"),
                          scale(Scale()),
                          color(Color()),
-                         mesh_resource("")
-    {
+                         mesh_resource("") {
         position.x = position.y = position.z = 0;
         orientation.x = orientation.y = orientation.z = 0;
         orientation.w = 1;
@@ -64,48 +63,63 @@ struct MarkerProperties
     void configureMarker(visualization_msgs::Marker &marker);
 };
 
-void MarkerProperties::configureMarker(visualization_msgs::Marker &marker)
-{
+void MarkerProperties::configureMarker(visualization_msgs::Marker &marker) {
     marker.type = type;
-    marker.id   = id;
-    marker.ns   = ns;
+    marker.id = id;
+    marker.ns = ns;
     marker.header.frame_id = frame_id;
-    marker.header.stamp    = ros::Time::now();
+    marker.header.stamp = ros::Time::now();
     marker.action = action;
-    marker.color.r = color.r; marker.color.g = color.g; marker.color.b = color.b;
+    marker.color.r = color.r;
+    marker.color.g = color.g;
+    marker.color.b = color.b;
     marker.color.a = color.transparency;
-    marker.scale.x = scale.x; marker.scale.y = scale.y; marker.scale.z = scale.z;
+    marker.scale.x = scale.x;
+    marker.scale.y = scale.y;
+    marker.scale.z = scale.z;
     marker.pose.position = position;
     marker.pose.orientation = orientation;
-    if(type == visualization_msgs::Marker::MESH_RESOURCE)
-        marker.mesh_resource    = mesh_resource;
+    if (type == visualization_msgs::Marker::MESH_RESOURCE)
+        marker.mesh_resource = mesh_resource;
 }
 
-class KiteVisualizer
-{
+class KiteVisualizer {
 public:
     KiteVisualizer(const ros::NodeHandle &_nh);
-    virtual ~KiteVisualizer(){}
 
-    geometry_msgs::Point getTranslation(){geometry_msgs::Vector3 point = kite_state.transforms[0].translation;
-                                          geometry_msgs::Point p; p.x = point.x; p.y = point.y; p.z = point.z;
-                                          return p;}
+    virtual ~KiteVisualizer() {}
 
-    geometry_msgs::Quaternion getRotation(){return kite_state.transforms[0].rotation;}
-    bool is_initialized(){return initialized;}
-    uint32_t getNumPublishers(){return state_sub.getNumPublishers();}
+    geometry_msgs::Point getTranslation() {
+        geometry_msgs::Vector3 point = kite_state.transforms[0].translation;
+        geometry_msgs::Point p;
+        p.x = point.x;
+        p.y = point.y;
+        p.z = point.z;
+        return p;
+    }
+
+    geometry_msgs::Quaternion getRotation() { return kite_state.transforms[0].rotation; }
+
+    bool is_initialized() { return initialized; }
+
+    uint32_t getNumPublishers() { return state_sub.getNumPublishers(); }
 
     DM world2rviz(const casadi::DM &pose);
+
     void state2marker(const casadi::DM &kite_pose, visualization_msgs::Marker &_marker);
-    visualization_msgs::Marker getPose(){return m_kite_marker;}
+
+    visualization_msgs::Marker getPose() { return m_kite_marker; }
 
     visualization_msgs::MarkerArray getOptimalTrajectory();
-    visualization_msgs::Marker      getVirtualTrajectory();
 
-    visualization_msgs::Marker      getKiteMarker(){return m_kite_marker;}
-    visualization_msgs::Marker      getTetherMarker();
+    visualization_msgs::Marker getVirtualTrajectory();
 
-    void setPath(const Function &path){PathFunction = path;}
+    visualization_msgs::Marker getKiteMarker() { return m_kite_marker; }
+
+    visualization_msgs::Marker getTetherMarker();
+
+    void setPath(const Function &path) { PathFunction = path; }
+
     bool tether_active;
 
 private:
@@ -114,25 +128,25 @@ private:
     ros::Subscriber opt_traj_sub;
 
     void filterCallback(const sensor_msgs::MultiDOFJointState::ConstPtr &msg);
+
     void controlCallback(const sensor_msgs::MultiDOFJointState::ConstPtr &msg);
 
-    sensor_msgs::MultiDOFJointState    kite_state;
-    visualization_msgs::Marker         m_kite_marker;
+    sensor_msgs::MultiDOFJointState kite_state;
+    visualization_msgs::Marker m_kite_marker;
 
     /** optimal trajectory visualisation */
-    visualization_msgs::MarkerArray    kite_traj_markers;
-    visualization_msgs::Marker         virtual_state_markers;
-    visualization_msgs::Marker         tether_marker;
+    visualization_msgs::MarkerArray kite_traj_markers;
+    visualization_msgs::Marker virtual_state_markers;
+    visualization_msgs::Marker tether_marker;
 
-    DM   optimal_trajectory;
+    DM optimal_trajectory;
     Function PathFunction;
     bool initialized;
 
     DM convertToDM(const sensor_msgs::MultiDOFJointState &_value, const bool &with_virtual = false);
 };
 
-KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh)
-{
+KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh) {
     nh = std::make_shared<ros::NodeHandle>(_nh);
 
     kite_state.twist.resize(1);
@@ -157,7 +171,7 @@ KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh)
 
     /** configure virtual state trajectory */
     m_props.id = 201;
-    m_props.type  = visualization_msgs::Marker::SPHERE_LIST;
+    m_props.type = visualization_msgs::Marker::SPHERE_LIST;
     m_props.color = Color(1.0, 0.0, 0.0, 0.5);
     m_props.configureMarker(virtual_state_markers);
     virtual_state_markers.lifetime = ros::Duration();
@@ -182,36 +196,32 @@ KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh)
     tether_active = false;
 }
 
-void KiteVisualizer::filterCallback(const sensor_msgs::MultiDOFJointState::ConstPtr &msg)
-{
+void KiteVisualizer::filterCallback(const sensor_msgs::MultiDOFJointState::ConstPtr &msg) {
     /** transform kite pose to Rviz reference frame */
     /** @badcode: */
     DM pose = convertToDM(*msg);
-    DM norm = DM::norm_2(pose(Slice(0,3)));
-    if(norm.nonzeros()[0] >= 2.67)
+    DM norm = DM::norm_2(pose(Slice(0, 3)));
+    if (norm.nonzeros()[0] >= 2.67)
         tether_active = true;
     else
         tether_active = false;
 
     DM kite_state_dm = world2rviz(pose);
-   state2marker(kite_state_dm, m_kite_marker);
+    state2marker(kite_state_dm, m_kite_marker);
     initialized = true;
 }
 
-void KiteVisualizer::controlCallback(const sensor_msgs::MultiDOFJointState::ConstPtr &msg)
-{
+void KiteVisualizer::controlCallback(const sensor_msgs::MultiDOFJointState::ConstPtr &msg) {
     optimal_trajectory = convertToDM(*msg, true);
     //optimal_trajectory = world2rviz(pose);
 }
 
-DM KiteVisualizer::convertToDM(const sensor_msgs::MultiDOFJointState &_value, const bool &with_virtual)
-{
+DM KiteVisualizer::convertToDM(const sensor_msgs::MultiDOFJointState &_value, const bool &with_virtual) {
     uint num_poses = _value.transforms.size();
-    int  size      = with_virtual ? 10 : 7;
+    int size = with_virtual ? 10 : 7;
     DM poses = DM::zeros(size, num_poses);
 
-    for(uint i = 0; i < num_poses; ++i)
-    {
+    for (uint i = 0; i < num_poses; ++i) {
         poses(0, i) = _value.transforms[i].translation.x;
         poses(1, i) = _value.transforms[i].translation.y;
         poses(2, i) = _value.transforms[i].translation.z;
@@ -220,8 +230,7 @@ DM KiteVisualizer::convertToDM(const sensor_msgs::MultiDOFJointState &_value, co
         poses(5, i) = _value.transforms[i].rotation.y;
         poses(6, i) = _value.transforms[i].rotation.z;
 
-        if(with_virtual)
-        {
+        if (with_virtual) {
             poses(7, i) = _value.wrench[i].force.x;
             poses(8, i) = _value.wrench[i].force.y;
             poses(9, i) = _value.wrench[i].force.z;
@@ -230,42 +239,38 @@ DM KiteVisualizer::convertToDM(const sensor_msgs::MultiDOFJointState &_value, co
     return poses;
 }
 
-DM KiteVisualizer::world2rviz(const DM &world_pose)
-{
+DM KiteVisualizer::world2rviz(const DM &world_pose) {
     DM pose = DM::zeros(world_pose.size());
     DM transform = DM::vertcat({0, 1, 0, 0});
     /** do only position transform if receive a point*/
-    if(pose.size1() == 3)
-    {
-        DM q_pose = quat_multiply(transform, DM::vertcat({0, world_pose}) );
-        DM tmp = quat_multiply(q_pose, quat_inverse(transform) );
-        pose = tmp(Slice(1,4), 0);
+    if (pose.size1() == 3) {
+        DM q_pose = quat_multiply(transform, DM::vertcat({0, world_pose}));
+        DM tmp = quat_multiply(q_pose, quat_inverse(transform));
+        pose = tmp(Slice(1, 4), 0);
 
         return pose;
     }
 
     /** position transform */
-    DM q_pose = quat_multiply(transform, DM::vertcat({0, world_pose(Slice(0,3), 0) }) );
-    DM tmp = quat_multiply(q_pose, quat_inverse(transform) );
-    pose(Slice(0,3), 0) = tmp(Slice(1,4), 0);
+    DM q_pose = quat_multiply(transform, DM::vertcat({0, world_pose(Slice(0, 3), 0)}));
+    DM tmp = quat_multiply(q_pose, quat_inverse(transform));
+    pose(Slice(0, 3), 0) = tmp(Slice(1, 4), 0);
     /** attitude transform */
-    pose(Slice(3,7),0) = quat_multiply(quat_multiply(transform, world_pose(Slice(3,7), 0)), quat_inverse(transform));
+    pose(Slice(3, 7), 0) = quat_multiply(quat_multiply(transform, world_pose(Slice(3, 7), 0)), quat_inverse(transform));
 
-    if(pose.size1() == 10)
-    {
-        q_pose = quat_multiply(transform, DM::vertcat({0, world_pose(Slice(7,10), 0) }) );
-        tmp = quat_multiply(q_pose, quat_inverse(transform) );
-        pose(Slice(7,10), 0) = tmp(Slice(1,4), 0);
+    if (pose.size1() == 10) {
+        q_pose = quat_multiply(transform, DM::vertcat({0, world_pose(Slice(7, 10), 0)}));
+        tmp = quat_multiply(q_pose, quat_inverse(transform));
+        pose(Slice(7, 10), 0) = tmp(Slice(1, 4), 0);
     }
 
     return pose;
 }
 
-visualization_msgs::MarkerArray KiteVisualizer::getOptimalTrajectory()
-{
+visualization_msgs::MarkerArray KiteVisualizer::getOptimalTrajectory() {
     visualization_msgs::MarkerArray m_array;
     int array_size = optimal_trajectory.size2();
-    if(array_size == 0)
+    if (array_size == 0)
         return m_array;
 
     DMVector split_traj = DM::horzsplit(optimal_trajectory, 1);
@@ -273,8 +278,7 @@ visualization_msgs::MarkerArray KiteVisualizer::getOptimalTrajectory()
     int id_counter = m_kite_marker.id;
 
     DMVector::const_iterator it = split_traj.begin();
-    while(std::distance<DMVector::const_iterator>(it, split_traj.end()) > 0)
-    {
+    while (std::distance<DMVector::const_iterator>(it, split_traj.end()) > 0) {
         DM state = world2rviz(*it);
         //std::cout << state << "\n";
         id_counter += 2;
@@ -297,19 +301,17 @@ visualization_msgs::MarkerArray KiteVisualizer::getOptimalTrajectory()
     return m_array;
 }
 
-visualization_msgs::Marker KiteVisualizer::getVirtualTrajectory()
-{
+visualization_msgs::Marker KiteVisualizer::getVirtualTrajectory() {
     visualization_msgs::Marker m_array = virtual_state_markers;
     int array_size = optimal_trajectory.size2();
-    if(array_size == 0)
+    if (array_size == 0)
         return m_array;
 
     DMVector split_traj = DM::horzsplit(optimal_trajectory, 1);
     m_array.points.clear();
 
     DMVector::const_iterator it = split_traj.begin();
-    while( std::distance<DMVector::const_iterator>(it, split_traj.end()) > 0)
-    {
+    while (std::distance<DMVector::const_iterator>(it, split_traj.end()) > 0) {
         DM point = (*it)(Slice(7, 10));
         point = world2rviz(point);
         geometry_msgs::Point p;
@@ -325,14 +327,12 @@ visualization_msgs::Marker KiteVisualizer::getVirtualTrajectory()
     return m_array;
 }
 
-visualization_msgs::Marker KiteVisualizer::getTetherMarker()
-{
+visualization_msgs::Marker KiteVisualizer::getTetherMarker() {
     tether_marker.points[1] = m_kite_marker.pose.position;
     return tether_marker;
 }
 
-void KiteVisualizer::state2marker(const DM &kite_pose, visualization_msgs::Marker &_marker)
-{
+void KiteVisualizer::state2marker(const DM &kite_pose, visualization_msgs::Marker &_marker) {
     std::vector<double> pose = kite_pose.nonzeros();
     _marker.pose.position.x = pose[0];
     _marker.pose.position.y = pose[1];
@@ -345,8 +345,7 @@ void KiteVisualizer::state2marker(const DM &kite_pose, visualization_msgs::Marke
 }
 
 
-int main( int argc, char** argv )
-{
+int main(int argc, char **argv) {
     ros::init(argc, argv, "kite_visualization_node");
     ros::NodeHandle n;
     ros::Rate r(10);
@@ -355,23 +354,44 @@ int main( int argc, char** argv )
 
     KiteVisualizer kite(n);
     visualization_msgs::Marker gs_marker;
+    visualization_msgs::Marker windVector_marker;
     visualization_msgs::Marker kite_marker;
     visualization_msgs::Marker path_marker;
     visualization_msgs::Marker tether_marker;
 
     MarkerProperties marker_props;
-    marker_props.type  = visualization_msgs::Marker::CYLINDER;
+    marker_props.type = visualization_msgs::Marker::CYLINDER;
     marker_props.scale = Scale(0.1, 0.1, 2.0);
-    marker_props.color = Color(0.0, 1.0, 0.0, 1.0);
-    marker_props.configureMarker(gs_marker);
+    marker_props.color = Color(0.0, 1.0, 0.0, 0.0);
+    marker_props.configureMarker(windVector_marker);
     gs_marker.pose.position.z = 1.0;
     gs_marker.lifetime = ros::Duration();
+
+    /** Wind vector arrow set up */
+    double windFrom_deg = 135;
+    double windDir = windFrom_deg + 180;
+    if (windDir > 360) windDir -= 360;
+    windDir = windDir * M_PI/180.0;
+
+    marker_props.id = 77;
+    marker_props.type = visualization_msgs::Marker::ARROW;
+    marker_props.position.x = 0;
+    marker_props.position.y = 0;
+    marker_props.position.z = 0;
+    marker_props.orientation.w = cos(windDir/2);
+    marker_props.orientation.x = 0;
+    marker_props.orientation.y = 0;
+    marker_props.orientation.z = -sin(windDir/2);
+    marker_props.scale = Scale(10, 1, 1);
+    marker_props.color = Color(0, 1, 0, 0.5);
+    marker_props.configureMarker(windVector_marker);
+    windVector_marker.lifetime = ros::Duration();
 
     /** kite marker set up */
     marker_props.id = 1;
     marker_props.type = visualization_msgs::Marker::MESH_RESOURCE;
     marker_props.mesh_resource = "package://openkite/meshes/kite_rviz.dae";
-    marker_props.scale = Scale(0.1, 0.1, 0.1);
+    marker_props.scale = Scale(1.8, 1.8, 1.8);
     marker_props.configureMarker(kite_marker);
     kite_marker.lifetime = ros::Duration();
 
@@ -385,7 +405,7 @@ int main( int argc, char** argv )
 
     /** create a path */
     SX x = SX::sym("x");
-    double radius   = 2.72;
+    double radius = 30.0; //2.72;
     double altitude = 0.0;
     SX Path = SX::vertcat(SXVector{radius * cos(x), radius * sin(x), altitude});
     /** rotate path */
@@ -393,12 +413,11 @@ int main( int argc, char** argv )
     SX q_rot_inv = kmath::quat_inverse(q_rot);
     SX qP_tmp = kmath::quat_multiply(q_rot_inv, SX::vertcat({0, Path}));
     SX qP_q = kmath::quat_multiply(qP_tmp, q_rot);
-    Path = qP_q(Slice(1,4), 0);
+    Path = qP_q(Slice(1, 4), 0);
 
     Function path_fun = Function("path", {x}, {Path});
-    for(double alpha = 0; alpha < 2 * M_PI; alpha += 0.2)
-    {
-        DMVector res = path_fun( DMVector{DM(alpha)} );
+    for (double alpha = 0; alpha < 2 * M_PI; alpha += 0.2) {
+        DMVector res = path_fun(DMVector{DM(alpha)});
         geometry_msgs::Point p;
         DM point = res[0];
         p.x = point.nonzeros()[0];
@@ -409,21 +428,17 @@ int main( int argc, char** argv )
 
     bool published_once = false;
 
-    while (ros::ok())
-    {
+    while (ros::ok()) {
         // Publish the marker
-        while (marker_pub.getNumSubscribers() < 1)
-        {
-            if (!ros::ok())
-            {
+        while (marker_pub.getNumSubscribers() < 1) {
+            if (!ros::ok()) {
                 return 0;
             }
             ROS_WARN_ONCE("Please create a subscriber to the marker");
             sleep(1);
         }
 
-        if(kite.is_initialized())
-        {
+        if (kite.is_initialized()) {
             kite_marker = kite.getKiteMarker();
             kite_marker.color.a = 1.0;
             marker_pub.publish(kite_marker);
@@ -437,16 +452,16 @@ int main( int argc, char** argv )
         /** draw optimal trajectories */
         visualization_msgs::Marker virt_markers = kite.getVirtualTrajectory();
         visualization_msgs::MarkerArray opt_markers = kite.getOptimalTrajectory();
-        if(!opt_markers.markers.empty())
+        if (!opt_markers.markers.empty())
             trajec_pub.publish(opt_markers);
 
-        if(!virt_markers.points.empty())
+        if (!virt_markers.points.empty())
             marker_pub.publish(virt_markers);
 
-        if(!published_once)
-        {
+        if (!published_once) {
             //marker_pub.publish(gs_marker);
             marker_pub.publish(path_marker);
+            marker_pub.publish(windVector_marker);
             published_once = true;
         }
 
