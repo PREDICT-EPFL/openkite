@@ -105,7 +105,7 @@ int main(int argc, char **argv)
 
     /** create a kite object */
     std::string kite_params_file;
-    n.param<std::string>("kite_params", kite_params_file, "/home/johannes/catkin_ws/src/openkite/data/easy_glider_4.yaml");
+    n.param<std::string>("kite_params", kite_params_file, "/home/johannes/identification/easy_glider_4.yaml");
     std::cout << "Using kite parameters from : " << kite_params_file << "\n";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
     AlgorithmProperties algo_props;

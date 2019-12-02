@@ -8,8 +8,14 @@
 #include "sys/stat.h"
 #include <fstream>
 
-struct PlaneGeometry
-{
+struct WindProperties {
+    double WindFrom_deg;
+    double WindSpeed;
+};
+
+struct PlaneGeometry {
+    double ImuPitchOffset;
+
     double WingSpan;
     double MAC;
     double AspectRatio;
@@ -22,8 +28,7 @@ struct PlaneGeometry
     double AerodynamicCenter;
 };
 
-struct PlaneInertia
-{
+struct PlaneInertia {
     double Mass;
     double Ixx;
     double Iyy;
@@ -31,8 +36,7 @@ struct PlaneInertia
     double Ixz;
 };
 
-struct PlaneAerodynamics
-{
+struct PlaneAerodynamics {
     double CL0;
     double CL0_tail;
     double CLa_total;
@@ -71,8 +75,7 @@ struct PlaneAerodynamics
     double Cnda;
 };
 
-struct TetherProperties
-{
+struct TetherProperties {
     double length;
     double Ks;
     double Kd;
@@ -81,29 +84,28 @@ struct TetherProperties
     double rz;
 };
 
-struct KiteProperties
-{
+struct KiteProperties {
     std::string Name;
+    WindProperties Wind;
     PlaneGeometry Geometry;
     PlaneInertia Inertia;
     PlaneAerodynamics Aerodynamics;
     TetherProperties Tether;
 };
 
-struct AlgorithmProperties
-{
+struct AlgorithmProperties {
     IntType Integrator;
     double sampling_time;
 };
 
 
-namespace kite_utils
-{
+namespace kite_utils {
     /** load properties from a YAML file */
     KiteProperties LoadProperties(const std::string &filename);
 
     /** architecture-dependend time stamping */
     typedef std::chrono::time_point<std::chrono::system_clock> time_point;
+
     time_point get_time();
 
     /** write a DM vector to a file */
@@ -117,28 +119,35 @@ namespace kite_utils
 
 }
 
-class KiteDynamics
-{
+class KiteDynamics {
 public:
     //constructor
     KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps);
+
     KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const bool &id);
-    virtual ~KiteDynamics(){}
+
+    virtual ~KiteDynamics() {}
 
     /** public methods */
-    casadi::SX getSymbolicState(){return this->State;}
-    casadi::SX getSymbolicControl(){return this->Control;}
-    casadi::SX getSymbolicParameters(){return this->Parameters;}
+    casadi::SX getSymbolicState() { return this->State; }
 
-    casadi::SX getSymbolicDynamics(){return this->SymDynamics;}
-    casadi::SX getSymbolicIntegrator(){return this->SymIntegartor;}
-    casadi::SX getSymbolicJacobian(){return this->SymJacobian;}
+    casadi::SX getSymbolicControl() { return this->Control; }
 
-    casadi::Function getNumericDynamics(){return this->NumDynamics;}
-    casadi::Function getNumericIntegrator(){return this->NumIntegrator;}
-    casadi::Function getNumericJacobian(){return this->NumJacobian;}
+    casadi::SX getSymbolicParameters() { return this->Parameters; }
 
-    casadi::Function getAeroDynamicForces(){return this->AeroDynamics;}
+    casadi::SX getSymbolicDynamics() { return this->SymDynamics; }
+
+    casadi::SX getSymbolicIntegrator() { return this->SymIntegartor; }
+
+    casadi::SX getSymbolicJacobian() { return this->SymJacobian; }
+
+    casadi::Function getNumericDynamics() { return this->NumDynamics; }
+
+    casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
+
+    casadi::Function getNumericJacobian() { return this->NumJacobian; }
+
+    casadi::Function getAeroDynamicForces() { return this->AeroDynamics; }
 
 private:
     //state variables
@@ -165,15 +174,17 @@ private:
 };
 
 /** 6-DoF Kinematics of a Rigid Body */
-class RigidBodyKinematics
-{
+class RigidBodyKinematics {
 public:
     RigidBodyKinematics(const AlgorithmProperties &AlgoProps);
-    virtual ~RigidBodyKinematics(){}
 
-    casadi::Function getNumericIntegrator() {return NumIntegartor;}
-    casadi::Function getNumericJacobian() {return NumJacobian;}
-    casadi::Function getNumericDynamcis() {return NumDynamics;}
+    virtual ~RigidBodyKinematics() {}
+
+    casadi::Function getNumericIntegrator() { return NumIntegartor; }
+
+    casadi::Function getNumericJacobian() { return NumJacobian; }
+
+    casadi::Function getNumericDynamcis() { return NumDynamics; }
 
 private:
     casadi::SX state;
@@ -186,7 +197,6 @@ private:
     /** numerical evaluation of system dynamics */
     casadi::Function NumDynamics;
 };
-
 
 
 #endif // KITE_H
