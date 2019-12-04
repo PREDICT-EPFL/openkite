@@ -14,7 +14,7 @@ struct WindProperties {
 };
 
 struct PlaneGeometry {
-    double ImuPitchOffset;
+    double ImuPitchOffset_deg;
 
     double WingSpan;
     double MAC;

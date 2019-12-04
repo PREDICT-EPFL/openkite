@@ -42,7 +42,7 @@ int main(void) {
     } flight;
 
     /// 4. ///
-    const int dimp = 1 + 9; // 1 general parameter + // lon: 9, lat: 16 identification parameters
+    const int dimp = 10; // lon: 10, lat: 14 identification parameters
 
     /// 5. ///
     const int DATA_POINTS = 127;
@@ -60,7 +60,7 @@ int main(void) {
     std::cout << flightDataPath << "\n";
 
     /** define kite dynamics */
-    std::string kite_params_file = "/home/johannes/identification/easy_glider_4.yaml";
+    std::string kite_params_file = "/home/johannes/identification/eg4.yaml";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
 
     /** Load wind data **/
@@ -167,9 +167,7 @@ int main(void) {
     /** --------------------- **/
     /** Geometric parameters  **/
     /** --------------------- **/
-    double imuPitchOffset = kite_props.Geometry.ImuPitchOffset;
-
-    REF_P = DM::vertcat({REF_P, imuPitchOffset}); // 1 general parameter
+    double imuPitchOffset = kite_props.Geometry.ImuPitchOffset_deg * M_PI / 180.0;
 
     //double b = kite_props.Geometry.WingSpan;
     //double c = kite_props.Geometry.MAC;
@@ -263,29 +261,33 @@ int main(void) {
     /** LONGITUDINAL IDENTIFICATION PARAMETERS ---------------------------------------------------------------------- */
     if (flight.maneuver == "identPitch") {
         int b = REF_P.size1(); // parameter size before
+
         REF_P = DM::vertcat({REF_P,
+                             imuPitchOffset,
                              CL0, CLa_tot,
                              CD0_tot, Cm0, Cma,
                              CLq, Cmq,
                              CLde, Cmde,
-                            }); // 9 longitudinal parameters
+                            }); // 10 longitudinal parameters
 
         /** parameter bounds */
         LBP = REF_P;
         UBP = REF_P;
 
-        set_parameter_bounds(LBP, UBP, b + 0, REF_P, -0.1, 0.1); // CL0
-        set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.05, 0.1); // CLa_tot
+        set_parameter_bounds(LBP, UBP, b + 0, -10.0 * M_PI / 180.0, 10.0 * M_PI / 180.0); // imuPitchOffset
 
-        set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.1, 0.25); // CD0_tot
-        set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.5, 0.5); // Cm0
-        set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.1, 0.3); // Cma
+        set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.1, 0.1); // CL0
+        set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.05, 0.1); // CLa_tot
 
-        set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.2, 0.2); // CLq
-        set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.3, 0.3); // Cmq
+        set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.1, 0.25); // CD0_tot
+        set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5); // Cm0
+        set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.1, 0.3); // Cma
 
-        set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5); // CLde
-        set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5); // Cmde
+        set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.2, 0.2); // CLq
+        set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.3, 0.3); // Cmq
+
+        set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5); // CLde
+        set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5); // Cmde
 
         Q = SX::diag(SX({1e2, 0, 1e2,
                          0, 1e2, 0,
@@ -298,33 +300,31 @@ int main(void) {
     if (flight.maneuver == "identRoll") {
         int b = REF_P.size1(); // parameter size before
         REF_P = DM::vertcat({REF_P,
-                             CYb, Cn0, Cnb, Cl0, Clb,
+                             CYb, Cnb, Clb,
                              CYr, Cnr, Clr, CYp, Clp, Cnp,
                              CYdr, Cndr, Cldr, Clda, Cnda,
-                            }); // 16 lateral parameters
+                            }); // 14 lateral parameters
 
         /** parameter bounds */
         LBP = REF_P;
         UBP = REF_P;
 
         set_parameter_bounds(LBP, UBP, b + 0, REF_P, -0.5, 0.5);  // CYb
-        set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.5);  // Cn0
-        set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.5, 0.5);  // Cnb
-        set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.5, 0.5);  // Cl0
-        set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5);  // Clb
+        set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.5);  // Cnb
+        set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.5, 0.5);  // Clb
 
-        set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.3, 0.3);  // CYr
-        set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.5, 0.5);  // Cnr
-        set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5);  // Clr
-        set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5);  // CYp
-        set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5);  // Clp
-        set_parameter_bounds(LBP, UBP, b + 10, REF_P, -0.3, 1.0);  // Cnp
+        set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.3, 0.3);  // CYr
+        set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5);  // Cnr
+        set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.5, 0.5);  // Clr
+        set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.5, 0.5);  // CYp
+        set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5);  // Clp
+        set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.3, 1.0);  // Cnp
 
-        set_parameter_bounds(LBP, UBP, b + 11, REF_P, -0.5, 0.5);  // CYdr
-        set_parameter_bounds(LBP, UBP, b + 12, REF_P, -0.5, 0.5);  // Cndr
-        set_parameter_bounds(LBP, UBP, b + 13, REF_P, -0.5, 0.5);  // Cldr
-        set_parameter_bounds(LBP, UBP, b + 14, REF_P, -0.5, 0.5);  // Clda
-        set_parameter_bounds(LBP, UBP, b + 15, REF_P, -0.5, 0.5);  // Cnda
+        set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5);  // CYdr
+        set_parameter_bounds(LBP, UBP, b + 10, REF_P, -0.5, 0.5);  // Cndr
+        set_parameter_bounds(LBP, UBP, b + 11, REF_P, -0.5, 0.5);  // Cldr
+        set_parameter_bounds(LBP, UBP, b + 12, REF_P, -0.5, 0.5);  // Clda
+        set_parameter_bounds(LBP, UBP, b + 13, REF_P, -0.5, 0.5);  // Cnda
 
         Q = SX::diag(SX({0, 1e2, 0,
                          1e2, 0, 1e2,
@@ -332,9 +332,6 @@ int main(void) {
                          1e2, 1e2, 1e2, 1e2}));
     }
     /** END OF LATERAL IDENTIFICATION PARAMETERS -------------------------------------------------------------------- */
-
-    /** General parameter bounds */
-    set_parameter_bounds(LBP, UBP, 0, -7.0 * M_PI / 180.0, 7.0 * M_PI / 180.0);  // imuOffsetPitch
 
     std::cout << "OK: Parameter preparation\n";
 
@@ -522,10 +519,11 @@ int main(void) {
 
     /** update parameter file */
     YAML::Node config = YAML::LoadFile(kite_params_file);
-    config["geometry"]["imu_pitch_offs"] = new_params_vec[0];
 
     /** LONGITUDINAL IDENTIFICATION PARAMETERS ---------------------------------------------------------------------- */
     if (flight.maneuver == "identPitch") {
+        config["geometry"]["imu_pitch_offs_deg"] = new_params_vec[0] * 180.0 / M_PI;
+
         config["aerodynamic"]["CL0"] = new_params_vec[1];
         config["aerodynamic"]["CLa_total"] = new_params_vec[2];
 
@@ -543,23 +541,23 @@ int main(void) {
 
     /** LATERAL IDENTIFICATION PARAMETERS --------------------------------------------------------------------------- */
     if (flight.maneuver == "identRoll") {
-        config["aerodynamic"]["CYb"] = new_params_vec[1];
-        config["aerodynamic"]["Cn0"] = new_params_vec[2];
-        config["aerodynamic"]["Cnb"] = new_params_vec[3];
-        config["aerodynamic"]["Clb"] = new_params_vec[4];
+        config["aerodynamic"]["CYb"] = new_params_vec[0];
+        config["aerodynamic"]["Cn0"] = new_params_vec[1];
+        config["aerodynamic"]["Cnb"] = new_params_vec[2];
+        config["aerodynamic"]["Clb"] = new_params_vec[3];
 
-        config["aerodynamic"]["CYr"] = new_params_vec[5];
-        config["aerodynamic"]["Cnr"] = new_params_vec[6];
-        config["aerodynamic"]["Clr"] = new_params_vec[7];
-        config["aerodynamic"]["CYp"] = new_params_vec[8];
-        config["aerodynamic"]["Clp"] = new_params_vec[9];
-        config["aerodynamic"]["Cnp"] = new_params_vec[10];
+        config["aerodynamic"]["CYr"] = new_params_vec[4];
+        config["aerodynamic"]["Cnr"] = new_params_vec[5];
+        config["aerodynamic"]["Clr"] = new_params_vec[6];
+        config["aerodynamic"]["CYp"] = new_params_vec[7];
+        config["aerodynamic"]["Clp"] = new_params_vec[8];
+        config["aerodynamic"]["Cnp"] = new_params_vec[9];
 
-        config["aerodynamic"]["CYdr"] = new_params_vec[11];
-        config["aerodynamic"]["Cndr"] = new_params_vec[12];
-        config["aerodynamic"]["Cldr"] = new_params_vec[13];
-        config["aerodynamic"]["Clda"] = new_params_vec[14];
-        config["aerodynamic"]["Cnda"] = new_params_vec[15];
+        config["aerodynamic"]["CYdr"] = new_params_vec[10];
+        config["aerodynamic"]["Cndr"] = new_params_vec[11];
+        config["aerodynamic"]["Cldr"] = new_params_vec[12];
+        config["aerodynamic"]["Clda"] = new_params_vec[13];
+        config["aerodynamic"]["Cnda"] = new_params_vec[14];
     }
     /** END OF LATERAL IDENTIFICATION PARAMETERS -------------------------------------------------------------------- */
 
@@ -569,6 +567,7 @@ int main(void) {
     // config["tether"]["rx"] = new_params_vec[26];
     // config["tether"]["rz"] = new_params_vec[27];
 
-    std::ofstream fout(flightDataPath + "easy_glider_4_new.yaml");
+    std::ofstream fout(flightDataPath + "eg4_after_" + flight.maneuver + ".yaml");
     fout << config;
+
 }

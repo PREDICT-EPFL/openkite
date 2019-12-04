@@ -25,12 +25,12 @@ BOOST_AUTO_TEST_SUITE(kite_model_suite_test)
             //std::string maneuver = "identPitch";
 
             /// 3. ///
-            //std::string resampleMethod = "cheb";
+            // (always equal!) std::string resampleMethod = "cheb";
             std::string resampleMethod = "equal";
         } flight;
 
         /// 4. ///
-        const int DATA_POINTS = 123;
+        const int DATA_POINTS = 90;
 
         std::string flightDataPath = flightDataDir
                                      + "session_" + std::to_string(flight.session)
@@ -42,8 +42,8 @@ BOOST_AUTO_TEST_SUITE(kite_model_suite_test)
 
         /** define kite dynamics */
         /// 5. ///
-        std::string kite_config_file = "/home/johannes/identification/easy_glider_4.yaml";
-        kite_config_file = flightDataPath + "easy_glider_4_new.yaml";
+        std::string kite_config_file;
+        kite_config_file = "/home/johannes/identification/eg4.yaml";
         KiteProperties kite_props = kite_utils::LoadProperties(kite_config_file);
 
         /** Load wind data **/
