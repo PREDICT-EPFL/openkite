@@ -38,8 +38,8 @@ KiteNMPF::KiteNMPF(std::shared_ptr<KiteDynamics> _Kite, const Function &_Path) :
 
     NUM_SHOOTING_INTERVALS = 9;
 
-    /** @attention : need sensible reference velocity */
-    DM vel_ref = 0.05;
+    /** @attention : need sensible reference velocity */ // WHAT DOES SENSIBLE MEAN?
+    DM vel_ref = 15.0;
     this->setReferenceVelocity(vel_ref);
 
     WARM_START  = false;
@@ -55,7 +55,7 @@ void KiteNMPF::createNLP()
     SX U = Kite->getSymbolicControl();
 
     /** state and control dimensionality */
-    int n = 15;
+    int n = 13 + 2;
     int m = 4;
 
     /** define augmented dynamics of path parameter */
@@ -81,7 +81,7 @@ void KiteNMPF::createNLP()
     /** ----------------------------------------------------------------------------------*/
     const int num_segments = 2;
     const int poly_order   = 5;
-    const int dimx         = 15;
+    const int dimx         = 13 + 2;
     const int dimu         = 4;
     const int dimp         = 0;
 

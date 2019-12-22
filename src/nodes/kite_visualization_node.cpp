@@ -368,15 +368,15 @@ int main(int argc, char **argv) {
     gs_marker.lifetime = ros::Duration();
 
     /** Wind vector arrow set up */
-    double windFrom_deg = 135;
+    double windFrom_deg = 180;
     double windDir = windFrom_deg + 180;
     if (windDir > 360) windDir -= 360;
     windDir = windDir * M_PI/180.0;
 
     marker_props.id = 77;
     marker_props.type = visualization_msgs::Marker::ARROW;
-    marker_props.position.x = 0;
-    marker_props.position.y = 0;
+    marker_props.position.x = -10*cos(windDir);
+    marker_props.position.y = 10*sin(windDir);
     marker_props.position.z = 0;
     marker_props.orientation.w = cos(windDir/2);
     marker_props.orientation.x = 0;
