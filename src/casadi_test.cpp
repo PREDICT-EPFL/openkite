@@ -13,7 +13,7 @@ using namespace casadi;
 int main()
 {
     //load config information
-    YAML::Node config = YAML::LoadFile("umx_radian.yaml");
+    YAML::Node config = YAML::LoadFile("/home/johannes/catkin_ws/src/openkite/data/umx_radian.yaml");
     const std::string plane = config["name"].as<std::string>();
     const double aspect_ratio = config["geometry"]["AR"].as<double>();
 

@@ -16,7 +16,7 @@ public:
     //KiteNMPF(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const casadi::Function &_Path);
     virtual ~KiteNMPF(){}
 
-    /** contsraints setters */
+    /** constraints setters */
     void setLBX(const casadi::DM &_lbx){this->LBX = _lbx;}
     void setUBX(const casadi::DM &_ubx){this->UBX = _ubx;}
 
@@ -66,11 +66,11 @@ public:
 
 private:
     std::shared_ptr<KiteDynamics> Kite;
-    casadi::SX Path;
+    //casadi::SX Path;
     casadi::Function PathFunc;
 
-    casadi::SX Contraints;
-    casadi::Function ContraintsFunc;
+    //casadi::SX Contraints;
+    //casadi::Function ContraintsFunc;
 
     casadi::SX reference_velocity;
 

@@ -1,6 +1,6 @@
 <launch>
   <node pkg="openkite" type="ekf_node" name="ekf_node">
-    <param name="kite_params" value="/Users/plistov/EPFL/ROS/ros_catkin_ws/devel/lib/openkite/umx_radian.yaml" />
+    <param name="kite_params" value="/home/johannes/catkin_ws/src/openkite/data/umx_radian.yaml" />
   </node>
   <node pkg="openkite" type="optitrack_client" name="optitrack" output="screen">
     <param name="server" value="192.168.1.100"/>

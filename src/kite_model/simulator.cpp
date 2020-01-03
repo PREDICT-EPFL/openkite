@@ -7,6 +7,7 @@ void Simulator::controlCallback(const openkite::aircraft_controls::ConstPtr &msg
     controls(0) = msg->thrust;
     controls(1) = msg->elevator;
     controls(2) = msg->rudder;
+    controls(3) = msg->ailerons;
 }
 
 Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
@@ -104,7 +105,7 @@ int main(int argc, char **argv)
 
     /** create a kite object */
     std::string kite_params_file;
-    n.param<std::string>("kite_params", kite_params_file, "./umx_radian.yaml");
+    n.param<std::string>("kite_params", kite_params_file, "/home/johannes/identification/easy_glider_4.yaml");
     std::cout << "Using kite parameters from : " << kite_params_file << "\n";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
     AlgorithmProperties algo_props;
