@@ -13,6 +13,8 @@ target_link_libraries(optitrack_client simple_vrpn_client)
 add_executable(control_proxy_node control_proxy_node.cpp control_proxy_node.hpp)
 target_link_libraries(control_proxy_node ${catkin_LIBRARIES})
 
+message(WARNING "${catkin_LIBRARIES}")
+
 add_executable(kite_visualization_node kite_visualization_node.cpp)
 target_link_libraries(kite_visualization_node kitemath ${catkin_LIBRARIES})
 

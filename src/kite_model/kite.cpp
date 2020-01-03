@@ -665,7 +665,7 @@ SimpleKinematicKite::SimpleKinematicKite(const AlgorithmProperties &AlgoProps, c
     SX R_GN = SX::zeros(3,3);
     R_GN(0,0) = -sin(theta) * cos(phi);  R_GN(0,1) = -sin(theta);  R_GN(0,2) = -cos(theta) * cos(phi);
     R_GN(1,0) = -sin(theta) * sin(phi);  R_GN(1,1) = cos(theta);   R_GN(1,2) = -cos(theta) * sin(phi);
-    R_GN(2,2) = cos(theta);              R_GN(2,1) = 0;            R_GN(2,2) = -sin(theta);
+    R_GN(2,2) = cos(theta);              R_GN(2,1) = 0;          R_GN(2,2) = -sin(theta);
 
     SX Rb_NK = SX::zeros(2,2);
     SX R_NK    = SX::eye(3);
@@ -681,6 +681,7 @@ SimpleKinematicKite::SimpleKinematicKite(const AlgorithmProperties &AlgoProps, c
     SX MRb_NKERNR = SX::mtimes(SX::mtimes(MRb_NKE, R_NK.T()), R_GN.T());
     SX qdot = SX::mtimes(MRb_NKERNR, vw) - SX::mtimes(Rb_NK, SX::vertcat({E * z, 0}));
     Dynamics = SX::vertcat({qdot, u_g});
+    std::cout << "Dynamics \n " << Dynamics(2) << "\n";
     NumDynamics = Function("SKK_Dynamics", {state, control}, {Dynamics});
 
     SX Jacobian = SX::jacobian(Dynamics, state);

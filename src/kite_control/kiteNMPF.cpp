@@ -31,7 +31,7 @@ KiteNMPF::KiteNMPF(std::shared_ptr<SimpleKinematicKite> _Kite, const Function &_
 
     Q  =  0.5 * SX::diag(SX::vertcat({1e3, 1e3}));
     R  =  SX::diag(SX::vertcat({1e-3, 1e-1}));
-    W  =  20 * 1e-1;
+    W  =  10 * 1e-1;
 
     Scale_X = DM::eye(5); invSX = DM::eye(5);
     Scale_U = DM::eye(2);  invSU = DM::eye(2);
@@ -94,7 +94,7 @@ void KiteNMPF::createNLP()
 
     SX x = SX::sym("x", dimx);
     SX u = SX::sym("u", dimu);
-    double tf = 2.0;
+    double tf = 1.5;
 
     if(scale)
     {
