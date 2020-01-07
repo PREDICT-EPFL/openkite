@@ -10,14 +10,14 @@ void Simulator::controlCallback(const openkite::aircraft_controls::ConstPtr &msg
     controls(3) = msg->ailerons;
 }
 
-Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
+Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh)
 {
-    m_object = std::make_shared<ODESolver>(object);
-    m_nh     = std::make_shared<ros::NodeHandle>(nh);
+    m_odeSolver = std::make_shared<ODESolver>(odeSolver);
+    m_nh        = std::make_shared<ros::NodeHandle>(nh);
 
     /** define dimensions first given solver object */
-    controls = DM::zeros(m_object->dim_u());
-    state    = DM::zeros(m_object->dim_x());
+    controls = DM::zeros(m_odeSolver->dim_u());
+    state    = DM::zeros(m_odeSolver->dim_x());
 
     /** initialize subscribers and publishers */
     int broadcast_state;
@@ -29,7 +29,8 @@ Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
     ROS_INFO_STREAM("Simulator initialized at: " << initial_value);
 
     //pose_pub  = m_nh->advertise<geometry_msgs::PoseStamped>("/kite_pose", 100);
-    state_pub = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/kite_state", 100);
+    state_pub   = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/kite_state", 100);
+    accel_pub   = m_nh->advertise<geometry_msgs::Vector3Stamped>("/kite_acceleration", 100);
 
     std::string control_topic = "/kite_controls";
     control_sub = m_nh->subscribe(control_topic, 100, &Simulator::controlCallback, this);
@@ -43,16 +44,23 @@ Simulator::Simulator(const ODESolver &object, const ros::NodeHandle &nh)
 
 void Simulator::simulate()
 {
-    Dict p = m_object->getParams();
+    Dict p = m_odeSolver->getParams();
     double dt = p["tf"];
 
-    state = m_object->solve(state, controls, dt);
+    /* Get specific nongravitational force before solving (altering) the state */
+    DM dynamics_evaluated = m_NumericSpecNongravForce(DMVector{state, controls})[0];
+    DM vdot = dynamics_evaluated(Slice(0, 3));
+    std::vector<double> vdot_vect = vdot.nonzeros();
+    specNongravForce = vdot_vect;
+
+    state = m_odeSolver->solve(state, controls, dt);
     //std::cout << "length : " << DM::norm_2(state(Slice(6,9))) << "\n";
     //std::cout << "State: " << state << "\n";
 }
 
 void Simulator::publish_state()
 {
+    /** State message */
     std::vector<double> state_vec = state.nonzeros();
 
     msg_state.header.stamp = ros::Time::now();
@@ -74,8 +82,16 @@ void Simulator::publish_state()
     msg_state.transforms[0].rotation.y = state_vec[11];
     msg_state.transforms[0].rotation.z = state_vec[12];
 
-    /** publish current state estimation */
     state_pub.publish(msg_state);
+
+    /** Acceleration message */
+    msg_accel.header.stamp = msg_state.header.stamp;
+
+    msg_accel.vector.x = specNongravForce[0];
+    msg_accel.vector.y = specNongravForce[1];
+    msg_accel.vector.z = specNongravForce[2];
+
+    accel_pub.publish(msg_accel);
 }
 
 void Simulator::publish_pose()
@@ -105,7 +121,7 @@ int main(int argc, char **argv)
 
     /** create a kite object */
     std::string kite_params_file;
-    n.param<std::string>("kite_params", kite_params_file, "/home/johannes/identification/easy_glider_4.yaml");
+    n.param<std::string>("kite_params", kite_params_file, "/home/johannes/identification/eg4.yaml");
     std::cout << "Using kite parameters from : " << kite_params_file << "\n";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
     AlgorithmProperties algo_props;
@@ -125,9 +141,12 @@ int main(int argc, char **argv)
 
     Dict params({{"tf", dt}, {"tol", 1e-6}, {"method", CVODES}});
     Function ode = kite.getNumericDynamics();
-    ODESolver object(ode, params);
+    auto dynamics = kite.getAeroDynamicForces();
 
-    Simulator simulator(object, n);
+    ODESolver odeSolver(ode, params);
+
+    Simulator simulator(odeSolver, n);
+    simulator.setNumericSpecNongravForce(kite.getNumericNumSpecNongravForce());
     ros::Rate loop_rate(50); /** 50 Hz */
 
     while (ros::ok())

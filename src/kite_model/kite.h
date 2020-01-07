@@ -143,6 +143,8 @@ public:
 
     casadi::Function getNumericDynamics() { return this->NumDynamics; }
 
+    casadi::Function getNumericNumSpecNongravForce() { return this->NumSpecNongravForce; }
+
     casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
 
     casadi::Function getNumericJacobian() { return this->NumJacobian; }
@@ -165,6 +167,8 @@ private:
 
     //numerical dynamics evaluation
     casadi::Function NumDynamics;
+    //numerical specific nongravitational force evaluation
+    casadi::Function NumSpecNongravForce;
     //numerical integral evaluation
     casadi::Function NumIntegrator;
     //numerical jacobian evaluation

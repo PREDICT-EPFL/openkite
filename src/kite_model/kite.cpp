@@ -300,11 +300,11 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 
     Faero_b = Faero_b + FdE + SX::vertcat({0, SF, 0});
 
-    /** Gravity force in BRF */
+    /** Gravitational acceleration in BRF */
     SX qG = kmath::quat_multiply(kmath::quat_inverse(q),
                                  SX::vertcat({0, 0, 0, g}));
     SX qG_q = kmath::quat_multiply(qG, q_corrected);
-    SX G_b = qG_q(Slice(1, 4), 0);
+    SX g_b = qG_q(Slice(1, 4), 0);
 
     /** Propulsion force in BRF */
     // const double p1 = -0.007752958684034;
@@ -338,8 +338,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 //    SX R_b = qR_q(Slice(1, 4), 0);
 
     /** Total external forces devided by glider's mass (linear acceleration) */
-    auto v_dot = (Faero_b + T_b) / Mass + G_b - SX::cross(w, v);
-//    auto v_dot = (Faero_b + T_b + R_b) / Mass + G_b - SX::cross(w, v);
+    auto v_dot = (Faero_b + T_b) / Mass + g_b - SX::cross(w, v);
+//    auto v_dot = (Faero_b + T_b + R_b) / Mass + g_b - SX::cross(w, v);
 
     /** ------------------------- */
     /** Dynamic Equation: Moments */
@@ -403,6 +403,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
     Function dyn_func = Function("dynamics", {state, control}, {dynamics});
+    Function specNongravForce_func = Function("spec_nongrav_force", {state, control}, {(Faero_b + T_b) / Mass});
 
     /** compute dynamics state Jacobian */
     SX d_jacobian = SX::jacobian(dynamics, state);
@@ -435,6 +436,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     this->SymJacobian = d_jacobian;
 
     this->NumDynamics = dyn_func;
+    this->NumSpecNongravForce = specNongravForce_func;
     this->NumJacobian = dyn_jac;
 
     /** return integrator function */
@@ -691,11 +693,11 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 
     Faero_b = Faero_b + FdE + SX::vertcat({0, SF, 0});
 
-    /** Gravity force in BRF */
+    /** Gravitational acceleration in BRF */
     SX qG = kmath::quat_multiply(kmath::quat_inverse(q),
                                  SX::vertcat({0, 0, 0, g}));
     SX qG_q = kmath::quat_multiply(qG, q_corrected);
-    SX G_b = qG_q(Slice(1, 4), 0);
+    SX g_b = qG_q(Slice(1, 4), 0);
 
     /** Propulsion force in BRF */
     // const double p1 = -0.007752958684034;
@@ -729,8 +731,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 //    SX R_b = qR_q(Slice(1, 4), 0);
 
     /** Total external forces devided by glider's mass (linear acceleration) */
-    auto v_dot = (Faero_b + T_b) / Mass + G_b - SX::cross(w, v);
-//    auto v_dot = (Faero_b + T_b + R_b) / Mass + G_b - SX::cross(w, v);
+    auto v_dot = (Faero_b + T_b) / Mass + g_b - SX::cross(w, v);
+//    auto v_dot = (Faero_b + T_b + R_b) / Mass + g_b - SX::cross(w, v);
 
     /** ------------------------- */
     /** Dynamic Equation: Moments */
@@ -799,6 +801,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
     Function dyn_func = Function("dynamics", {state, control, params}, {dynamics});
+    Function specNongravForce_func = Function("spec_nongrav_force", {state, control}, {(Faero_b + T_b) / Mass});
 
     /** compute dynamics state Jacobian */
     SX d_jacobian = SX::jacobian(dynamics, state);
@@ -830,6 +833,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     this->SymJacobian = d_jacobian;
 
     this->NumDynamics = dyn_func;
+    this->NumSpecNongravForce = specNongravForce_func;
     this->NumJacobian = dyn_jac;
 
     /** return integrator function */
