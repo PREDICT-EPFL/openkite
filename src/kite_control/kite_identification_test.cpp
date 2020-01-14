@@ -1,10 +1,10 @@
 #include "kiteNMPF.h"
 #include "integrator.h"
 #include <fstream>
+#include <utility>
 #include "pseudospectral/chebyshev.hpp"
 
 using namespace casadi;
-
 
 void set_parameter_bounds(DM &LBP, DM &UBP, const int &index,
                           const DM &REF_P, const double &LB_factor, const double &UB_factor) {
@@ -22,9 +22,88 @@ void set_parameter_bounds(DM &LBP, DM &UBP, const int &index,
 
 }
 
+void printSingleParameterOutput(const int paramNumber, const std::string &paramName,
+                                const double &paramFound, const double &param_LB, const double &param_UB,
+                                const double &param_sens, const double &sensitivity_max,
+                                const double &lagrangeScore = 0) {
+
+    const int p = 4;
+    const int w = 1 + 2 + 1 + p; // minus, 2 digits, decimal, 4 digits
+
+    /* Write line */
+    std::cout << std::fixed << std::setprecision(p);
+    std::cout << std::left;
+
+    std::cout << "(" << std::setw(2) << std::right << paramNumber << std::left << ")"
+              << " "
+              << std::setw(9) << paramName
+              << " = "
+              << std::setw(w) << std::right << paramFound << std::left;
+
+    { /* Bound visualization ---------------------------------------------------------------------------------------- */
+
+        /* Lower bound */
+        std::cout << std::setw(4) << " "
+                  << std::setw(w) << std::right << param_LB
+                  << " |";
+
+        { /* Body */
+
+            int nBins = 40;
+            double percentagePositionWithinBounds = (paramFound - param_LB) / (param_UB - param_LB);
+            int intPositionWithinBounds = static_cast<int>(std::round(percentagePositionWithinBounds * nBins - 0.5));
+
+            if (intPositionWithinBounds <= -1) intPositionWithinBounds = 0;
+            if (intPositionWithinBounds >= nBins) intPositionWithinBounds = nBins - 1;
+            for (int i = 0; i < nBins; ++i) {
+                if (i == intPositionWithinBounds)
+                    std::cout << "X";
+                else if (i == (nBins / 2))
+                    std::cout << "|";
+                else
+                    std::cout << "-";
+            }
+        }
+
+        /* Upper bound */
+        std::cout << "| " << std::setw(w) << param_UB;
+    }
+
+    std::cout << std::setw(4) << "";
+
+    { /* Sensitivity visualization ---------------------------------------------------------------------------------- */
+
+        /* Lower bound */
+        std::cout << std::setw(w) << std::right << "0"
+                  << " |";
+
+        /* Body */
+        int nBins = 40;
+        double percentagePositionWithinBounds = param_sens / sensitivity_max;
+        int intPositionWithinBounds = static_cast<int>(std::round(percentagePositionWithinBounds * nBins - 0.5));
+
+        if (intPositionWithinBounds <= -1) intPositionWithinBounds = 0;
+        if (intPositionWithinBounds >= nBins) intPositionWithinBounds = nBins - 1;
+        for (int i = 0; i < nBins; ++i) {
+            if (i == intPositionWithinBounds)
+                std::cout << "X";
+            else
+                std::cout << "-";
+        }
+
+        /* Upper bound */
+        std::cout << "> " << std::setw(w) << param_sens;
+
+
+    }
+    std::cout << "\n";
+}
+
 int main(void) {
 
     std::string flightDataDir = "/home/johannes/identification/processed_flight_data/";
+
+    /// 5 lines to adapt by the user ///
 
     struct FlightMetaData {
         /// 1. ///
@@ -60,7 +139,9 @@ int main(void) {
     std::cout << flightDataPath << "\n";
 
     /** define kite dynamics */
-    std::string kite_params_file = "/home/johannes/identification/eg4.yaml";
+    //std::string kite_params_file = "/home/johannes/identification/eg4.yaml";
+    std::string kite_params_file = flightDataPath + "eg4_after_" + flight.maneuver + ".yaml"; // Iterative
+
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
 
     /** Load wind data **/
@@ -150,6 +231,52 @@ int main(void) {
             id_control(Slice(1, id_control.size1()), Slice(0, id_control.size2()))); // without Time (first row)
 
     /** parameter bounds */
+//    /* Parameter struct for evaluation handling */
+//    struct Parameter {
+//        const int id{};
+//        const std::string name;
+//        double value{};
+//        double lowerBound{};
+//        double upperBound{};
+//
+//        Parameter() = default;
+//
+//        Parameter(const int &id_,
+//                  std::string name_,
+//                  const double &value_,
+//                  const double &lowerBound_,
+//                  const double &upperBound_) :
+//
+//                id(id_),
+//                name(std::move(name_)),
+//                value(value_),
+//                lowerBound(lowerBound_),
+//                upperBound(upperBound_) {}
+//    };
+
+    /* Parameter struct for evaluation handling */
+    struct Parameter {
+        const int id{};
+        const std::string name;
+        double sensitivity{};
+
+        Parameter() = default;
+
+        Parameter(const int &id_,
+                  std::string name_) :
+
+                id(id_),
+                name(std::move(name_)) {}
+
+        bool operator<(const Parameter &param) const {
+            return sensitivity > param.sensitivity;
+        }
+
+
+    };
+
+    std::list<Parameter> parameterList;
+
     DM REF_P;
     DM LBP;
     DM UBP;
@@ -275,19 +402,29 @@ int main(void) {
         UBP = REF_P;
 
         set_parameter_bounds(LBP, UBP, b + 0, -10.0 * M_PI / 180.0, 10.0 * M_PI / 180.0); // imuPitchOffset
+        parameterList.emplace_back(0, "PitchOffs");
 
         set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.1, 0.1); // CL0
         set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.05, 0.1); // CLa_tot
+        parameterList.emplace_back(1, "CL0");
+        parameterList.emplace_back(2, "CLa_tot");
 
         set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.1, 0.25); // CD0_tot
         set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5); // Cm0
         set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.1, 0.3); // Cma
+        parameterList.emplace_back(3, "CD0_tot");
+        parameterList.emplace_back(4, "Cm0");
+        parameterList.emplace_back(5, "Cma");
 
         set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.2, 0.2); // CLq
         set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.3, 0.3); // Cmq
+        parameterList.emplace_back(6, "CLq");
+        parameterList.emplace_back(7, "Cmq");
 
         set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5); // CLde
         set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5); // Cmde
+        parameterList.emplace_back(8, "CLde");
+        parameterList.emplace_back(9, "Cmde");
 
         Q = SX::diag(SX({1e2, 0, 1e2,
                          0, 1e2, 0,
@@ -312,6 +449,9 @@ int main(void) {
         set_parameter_bounds(LBP, UBP, b + 0, REF_P, -0.5, 0.5);  // CYb
         set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.5);  // Cnb
         set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.5, 0.5);  // Clb
+        parameterList.emplace_back(0, "CYb");
+        parameterList.emplace_back(1, "Cnb");
+        parameterList.emplace_back(2, "Clb");
 
         set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.3, 0.3);  // CYr
         set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5);  // Cnr
@@ -319,12 +459,23 @@ int main(void) {
         set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.5, 0.5);  // CYp
         set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5);  // Clp
         set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.3, 1.0);  // Cnp
+        parameterList.emplace_back(3, "CYr");
+        parameterList.emplace_back(4, "Cnr");
+        parameterList.emplace_back(5, "Clr");
+        parameterList.emplace_back(6, "CYp");
+        parameterList.emplace_back(7, "Clp");
+        parameterList.emplace_back(8, "Cnp");
 
         set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5);  // CYdr
         set_parameter_bounds(LBP, UBP, b + 10, REF_P, -0.5, 0.5);  // Cndr
         set_parameter_bounds(LBP, UBP, b + 11, REF_P, -0.5, 0.5);  // Cldr
         set_parameter_bounds(LBP, UBP, b + 12, REF_P, -0.5, 0.5);  // Clda
         set_parameter_bounds(LBP, UBP, b + 13, REF_P, -0.5, 0.5);  // Cnda
+        parameterList.emplace_back(9, "CYdr");
+        parameterList.emplace_back(10, "Cndr");
+        parameterList.emplace_back(11, "Cldr");
+        parameterList.emplace_back(12, "Clda");
+        parameterList.emplace_back(13, "Cnda");
 
         Q = SX::diag(SX({0, 1e2, 0,
                          1e2, 0, 1e2,
@@ -569,5 +720,47 @@ int main(void) {
 
     std::ofstream fout(flightDataPath + "eg4_after_" + flight.maneuver + ".yaml");
     fout << config;
+
+    /** Visualize parameters found within their bounds */
+    /* Add sensibility values to parameter list (order of coding)*/
+    for (Parameter &param : parameterList) {
+        param.sensitivity = std::abs(static_cast<double>(param_sens(param.id)));
+    }
+
+    /* Sort parameter list by sensitivity */
+    parameterList.sort();
+
+    double sensitivity_max = parameterList.begin()->sensitivity;
+
+    std::cout << "\n\n";
+    std::cout << std::left;
+    std::cout << std::setw(4) << "No."
+              << " "
+              << std::setw(9) << "Name"
+              << "   "
+              << std::setw(8) << "Value"
+
+              << std::setw(4) << ""
+
+              << std::setw(8) << "Lw.Bound"
+              << "  "
+              << std::setw(40) << "Value position in bounds"
+              << "  "
+              << std::setw(8) << "Up.Bound"
+
+              << std::setw(4) << ""
+
+              << std::setw(8) << ""
+              << "  "
+              << std::setw(40) << "Sensitivity"
+              << "\n";
+
+    for (Parameter &param : parameterList) {
+        int i = param.id;
+
+        printSingleParameterOutput(i, param.name,
+                                   new_params_vec[i], static_cast<double>(LBP(i)), static_cast<double>(UBP(i)),
+                                   param.sensitivity, sensitivity_max);
+    }
 
 }
