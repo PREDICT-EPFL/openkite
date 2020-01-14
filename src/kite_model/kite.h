@@ -9,8 +9,8 @@
 #include <fstream>
 
 struct WindProperties {
-    double WindFrom_deg;
-    double WindSpeed;
+    double WindFrom_deg{180.0};
+    double WindSpeed{0.0};
 };
 
 struct PlaneGeometry {

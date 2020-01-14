@@ -29,8 +29,8 @@ Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh)
     ROS_INFO_STREAM("Simulator initialized at: " << initial_value);
 
     //pose_pub  = m_nh->advertise<geometry_msgs::PoseStamped>("/kite_pose", 100);
-    state_pub   = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/kite_state", 100);
-    accel_pub   = m_nh->advertise<geometry_msgs::Vector3Stamped>("/kite_acceleration", 100);
+    state_pub   = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/kite_state", 1);
+    accel_pub   = m_nh->advertise<geometry_msgs::Vector3Stamped>("/kite_acceleration", 1);
 
     std::string control_topic = "/kite_controls";
     control_sub = m_nh->subscribe(control_topic, 100, &Simulator::controlCallback, this);
@@ -122,8 +122,13 @@ int main(int argc, char **argv)
     /** create a kite object */
     std::string kite_params_file;
     n.param<std::string>("kite_params", kite_params_file, "/home/johannes/identification/eg4.yaml");
-    std::cout << "Using kite parameters from : " << kite_params_file << "\n";
+    std::cout << "Simulator: Using kite parameters from: " << kite_params_file << "\n";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
+    n.param<double>("windFrom_deg", kite_props.Wind.WindFrom_deg, 180.0);
+    n.param<double>("windSpeed", kite_props.Wind.WindSpeed, 0.0);
+
+    std::cout << "Simulator: Wind from " << kite_props.Wind.WindFrom_deg << " deg at " << kite_props.Wind.WindSpeed << " m/s.\n";
+
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
@@ -134,7 +139,7 @@ int main(int argc, char **argv)
 
     /** create an integrator instance */
     double sim_rate;
-    n.param<double>("simulation_rate", sim_rate, 50);
+    n.param<double>("simulation_rate", sim_rate, 200);
     /** cast to seconds and round to ms */
     double dt = (1/sim_rate);
     dt = std::roundf(dt * 1000) / 1000;
@@ -147,7 +152,7 @@ int main(int argc, char **argv)
 
     Simulator simulator(odeSolver, n);
     simulator.setNumericSpecNongravForce(kite.getNumericNumSpecNongravForce());
-    ros::Rate loop_rate(50); /** 50 Hz */
+    ros::Rate loop_rate(200); /** 50 Hz */
 
     while (ros::ok())
     {

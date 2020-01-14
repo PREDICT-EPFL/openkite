@@ -347,7 +347,7 @@ void KiteVisualizer::state2marker(const DM &kite_pose, visualization_msgs::Marke
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "kite_visualization_node");
-    ros::NodeHandle n;
+    ros::NodeHandle n("~");
     ros::Rate r(10);
     ros::Publisher marker_pub = n.advertise<visualization_msgs::Marker>("/visualization_marker", 10);
     ros::Publisher trajec_pub = n.advertise<visualization_msgs::MarkerArray>("/trajectory_marker", 10);
@@ -368,26 +368,33 @@ int main(int argc, char **argv) {
     gs_marker.lifetime = ros::Duration();
 
     /** Wind vector arrow set up */
-    double windFrom_deg = 180;
+    double windFrom_deg;
+    n.param<double>("windFrom_deg", windFrom_deg, 180.0);
     double windDir = windFrom_deg + 180;
     if (windDir > 360) windDir -= 360;
-    windDir = windDir * M_PI/180.0;
+    windDir = windDir * M_PI / 180.0;
 
+    double windSpeed;
+    n.param<double>("windSpeed", windSpeed, 1.0);
+
+    double arrowLength = windSpeed * 2;
+    marker_props = {};
     marker_props.id = 77;
     marker_props.type = visualization_msgs::Marker::ARROW;
-    marker_props.position.x = -10*cos(windDir);
-    marker_props.position.y = 10*sin(windDir);
+    marker_props.position.x = -arrowLength * cos(windDir);
+    marker_props.position.y = arrowLength * sin(windDir);
     marker_props.position.z = 0;
-    marker_props.orientation.w = cos(windDir/2);
+    marker_props.orientation.w = cos(windDir / 2);
     marker_props.orientation.x = 0;
     marker_props.orientation.y = 0;
-    marker_props.orientation.z = -sin(windDir/2);
-    marker_props.scale = Scale(10, 1, 1);
+    marker_props.orientation.z = -sin(windDir / 2);
+    marker_props.scale = Scale(arrowLength, 1, 1);
     marker_props.color = Color(0, 1, 0, 0.5);
     marker_props.configureMarker(windVector_marker);
     windVector_marker.lifetime = ros::Duration();
 
     /** kite marker set up */
+    marker_props = {};
     marker_props.id = 1;
     marker_props.type = visualization_msgs::Marker::MESH_RESOURCE;
     marker_props.mesh_resource = "package://openkite/meshes/kite_rviz.dae";
@@ -396,6 +403,7 @@ int main(int argc, char **argv) {
     kite_marker.lifetime = ros::Duration();
 
     /** path markers set up */
+    marker_props = {};
     marker_props.id = 3;
     marker_props.type = visualization_msgs::Marker::LINE_STRIP;
     marker_props.scale.x = 0.025;
@@ -406,7 +414,7 @@ int main(int argc, char **argv) {
     /** create a path */
     SX x = SX::sym("x");
     double radius = 30.0; //2.72;
-    double altitude = 0.0;
+    double altitude = 50.0;
     SX Path = SX::vertcat(SXVector{radius * cos(x), radius * sin(x), altitude});
     /** rotate path */
     SX q_rot = SX::vertcat({cos(0 / 24), 0, sin(0 / 24), 0});
