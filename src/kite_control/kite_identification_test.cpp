@@ -139,8 +139,8 @@ int main(void) {
     std::cout << flightDataPath << "\n";
 
     /** define kite dynamics */
-    //std::string kite_params_file = "/home/johannes/identification/eg4.yaml";
-    std::string kite_params_file = flightDataPath + "eg4_after_" + flight.maneuver + ".yaml"; // Iterative
+    std::string kite_params_file = "/home/johannes/identification/eg4.yaml";
+    //std::string kite_params_file = flightDataPath + "eg4_after_" + flight.maneuver + ".yaml"; // Iterative
 
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
 
@@ -231,30 +231,7 @@ int main(void) {
             id_control(Slice(1, id_control.size1()), Slice(0, id_control.size2()))); // without Time (first row)
 
     /** parameter bounds */
-//    /* Parameter struct for evaluation handling */
-//    struct Parameter {
-//        const int id{};
-//        const std::string name;
-//        double value{};
-//        double lowerBound{};
-//        double upperBound{};
-//
-//        Parameter() = default;
-//
-//        Parameter(const int &id_,
-//                  std::string name_,
-//                  const double &value_,
-//                  const double &lowerBound_,
-//                  const double &upperBound_) :
-//
-//                id(id_),
-//                name(std::move(name_)),
-//                value(value_),
-//                lowerBound(lowerBound_),
-//                upperBound(upperBound_) {}
-//    };
-
-    /* Parameter struct for evaluation handling */
+    /* Parameter struct for sorting by sensitivity in descending order */
     struct Parameter {
         const int id{};
         const std::string name;
@@ -271,8 +248,6 @@ int main(void) {
         bool operator<(const Parameter &param) const {
             return sensitivity > param.sensitivity;
         }
-
-
     };
 
     std::list<Parameter> parameterList;
@@ -487,14 +462,6 @@ int main(void) {
     std::cout << "OK: Parameter preparation\n";
 
     /** ----------------------------------------------------------------------------------*/
-//    const int num_segments = 42;
-//    const int poly_order = 3;
-//    const int dimx = 13;
-//    const int dimu = 4;
-    //const double tf = 10.0;
-    //int dimx = static_cast<int>(REF_P.size1());
-    //int dimu = static_cast<int>(U.size1());
-    //int dimp = static_cast<int>(REF_P.size1());
     double tf = static_cast<double>(id_data(0, id_data.size2() - 1) - id_data(0, 0));
 
     std::cout << "tf = " << tf << "\n";
@@ -718,11 +685,8 @@ int main(void) {
     // config["tether"]["rx"] = new_params_vec[26];
     // config["tether"]["rz"] = new_params_vec[27];
 
-    std::ofstream fout(flightDataPath + "eg4_after_" + flight.maneuver + ".yaml");
-    fout << config;
-
     /** Visualize parameters found within their bounds */
-    /* Add sensibility values to parameter list (order of coding)*/
+    /* Add sensibility values to parameter list (order of coding) */
     for (Parameter &param : parameterList) {
         param.sensitivity = std::abs(static_cast<double>(param_sens(param.id)));
     }
@@ -732,6 +696,7 @@ int main(void) {
 
     double sensitivity_max = parameterList.begin()->sensitivity;
 
+    /* Header */
     std::cout << "\n\n";
     std::cout << std::left;
     std::cout << std::setw(4) << "No."
@@ -755,6 +720,7 @@ int main(void) {
               << std::setw(40) << "Sensitivity"
               << "\n";
 
+    /* Print parameter outputs */
     for (Parameter &param : parameterList) {
         int i = param.id;
 
@@ -762,5 +728,10 @@ int main(void) {
                                    new_params_vec[i], static_cast<double>(LBP(i)), static_cast<double>(UBP(i)),
                                    param.sensitivity, sensitivity_max);
     }
+
+    /** Save new parameters to file */
+    std::ofstream fout(flightDataPath + "eg4_after_" + flight.maneuver + ".yaml");
+    fout << config;
+
 
 }
