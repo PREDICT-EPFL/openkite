@@ -6,7 +6,7 @@
 
 using namespace casadi;
 
-void set_parameter_bounds(DM &LBP, DM &UBP, const int &index,
+void set_relative_parameter_bounds(DM &LBP, DM &UBP, const int &index,
                           const DM &REF_P, const double &LB_factor, const double &UB_factor) {
 
     LBP(index) = REF_P(index) + LB_factor * fabs(REF_P(index));
@@ -14,7 +14,7 @@ void set_parameter_bounds(DM &LBP, DM &UBP, const int &index,
 
 }
 
-void set_parameter_bounds(DM &LBP, DM &UBP, const int &index,
+void set_absolute_parameter_bounds(DM &LBP, DM &UBP, const int &index,
                           const double &absoluteLB, const double &absoluteUB) {
 
     LBP(index) = absoluteLB;
@@ -378,28 +378,28 @@ int main(void) {
         LBP = REF_P;
         UBP = REF_P;
 
-        set_parameter_bounds(LBP, UBP, b + 0, -10.0 * M_PI / 180.0, 10.0 * M_PI / 180.0); // imuPitchOffset
+        set_absolute_parameter_bounds(LBP, UBP, b + 0, -10.0 * M_PI / 180.0, 10.0 * M_PI / 180.0); // imuPitchOffset
         parameterList.emplace_back(0, "PitchOffs");
 
-        set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.1, 0.1); // CL0
-        set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.05, 0.1); // CLa_tot
+        set_relative_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.1, 0.1); // CL0
+        set_relative_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.05, 0.1); // CLa_tot
         parameterList.emplace_back(1, "CL0");
         parameterList.emplace_back(2, "CLa_tot");
 
-        set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.1, 0.25); // CD0_tot
-        set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5); // Cm0
-        set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.1, 0.3); // Cma
+        set_relative_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.1, 0.25); // CD0_tot
+        set_relative_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5); // Cm0
+        set_relative_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.1, 0.3); // Cma
         parameterList.emplace_back(3, "CD0_tot");
         parameterList.emplace_back(4, "Cm0");
         parameterList.emplace_back(5, "Cma");
 
-        set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.2, 0.2); // CLq
-        set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.3, 0.3); // Cmq
+        set_relative_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.2, 0.2); // CLq
+        set_relative_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.3, 0.3); // Cmq
         parameterList.emplace_back(6, "CLq");
         parameterList.emplace_back(7, "Cmq");
 
-        set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5); // CLde
-        set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5); // Cmde
+        set_relative_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5); // CLde
+        set_relative_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5); // Cmde
         parameterList.emplace_back(8, "CLde");
         parameterList.emplace_back(9, "Cmde");
 
@@ -423,19 +423,19 @@ int main(void) {
         LBP = REF_P;
         UBP = REF_P;
 
-        set_parameter_bounds(LBP, UBP, b + 0, REF_P, -0.5, 0.5);  // CYb
-        set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.5);  // Cnb
-        set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.5, 0.5);  // Clb
+        set_relative_parameter_bounds(LBP, UBP, b + 0, REF_P, -0.5, 0.5);  // CYb
+        set_relative_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.5);  // Cnb
+        set_relative_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.5, 0.5);  // Clb
         parameterList.emplace_back(0, "CYb");
         parameterList.emplace_back(1, "Cnb");
         parameterList.emplace_back(2, "Clb");
 
-        set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.3, 0.3);  // CYr
-        set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5);  // Cnr
-        set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.5, 0.5);  // Clr
-        set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.5, 0.5);  // CYp
-        set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5);  // Clp
-        set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.3, 1.0);  // Cnp
+        set_relative_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.3, 0.3);  // CYr
+        set_relative_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5);  // Cnr
+        set_relative_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.5, 0.5);  // Clr
+        set_relative_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.5, 0.5);  // CYp
+        set_relative_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5);  // Clp
+        set_relative_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.3, 1.0);  // Cnp
         parameterList.emplace_back(3, "CYr");
         parameterList.emplace_back(4, "Cnr");
         parameterList.emplace_back(5, "Clr");
@@ -443,11 +443,11 @@ int main(void) {
         parameterList.emplace_back(7, "Clp");
         parameterList.emplace_back(8, "Cnp");
 
-        set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5);  // CYdr
-        set_parameter_bounds(LBP, UBP, b + 10, REF_P, -0.5, 0.5);  // Cndr
-        set_parameter_bounds(LBP, UBP, b + 11, REF_P, -0.5, 0.5);  // Cldr
-        set_parameter_bounds(LBP, UBP, b + 12, REF_P, -0.5, 0.5);  // Clda
-        set_parameter_bounds(LBP, UBP, b + 13, REF_P, -0.5, 0.5);  // Cnda
+        set_relative_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5);  // CYdr
+        set_relative_parameter_bounds(LBP, UBP, b + 10, REF_P, -0.5, 0.5);  // Cndr
+        set_relative_parameter_bounds(LBP, UBP, b + 11, REF_P, -0.5, 0.5);  // Cldr
+        set_relative_parameter_bounds(LBP, UBP, b + 12, REF_P, -0.5, 0.5);  // Clda
+        set_relative_parameter_bounds(LBP, UBP, b + 13, REF_P, -0.5, 0.5);  // Cnda
         parameterList.emplace_back(9, "CYdr");
         parameterList.emplace_back(10, "Cndr");
         parameterList.emplace_back(11, "Cldr");
