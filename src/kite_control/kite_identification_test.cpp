@@ -128,6 +128,11 @@ int main(void) {
     const int num_segments = 42;
     const int poly_order = 3;
 
+    /// 6. Choosing same parameter input file as output file gives iterative identification ///
+    std::string kite_params_file = "/home/johannes/identification/eg4.yaml";
+    //std::string kite_params_file = flightDataPath + "eg4_after_" + flight.maneuver + ".yaml"; // Iterative
+
+    /// 7. ///
     /** COMMENT / UNCOMMENT THE SUITING PARAMETERS IN KITE.CPP ! */
 
     std::string flightDataPath = flightDataDir
@@ -139,9 +144,6 @@ int main(void) {
     std::cout << flightDataPath << "\n";
 
     /** define kite dynamics */
-    std::string kite_params_file = "/home/johannes/identification/eg4.yaml";
-    //std::string kite_params_file = flightDataPath + "eg4_after_" + flight.maneuver + ".yaml"; // Iterative
-
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
 
     /** Load wind data **/
