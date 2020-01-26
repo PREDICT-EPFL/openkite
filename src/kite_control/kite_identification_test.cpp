@@ -206,7 +206,10 @@ void readIn_sequenceInfo(const std::string &filepath,
 
 void readIn_identConfig(const std::string &filepath,
 
-                        std::string &kite_params_in_dir, std::string &kite_params_in_filename, int &nIt) {
+                        std::string &kite_params_in_dir, std::string &kite_params_in_filename,
+                        int &nIt, bool &kite_params_warmStart) {
+
+    int kite_params_warmStart_int{0};
 
     /* Read in identConfig file */
     std::ifstream id_config_file(filepath, std::ios::in);
@@ -214,6 +217,9 @@ void readIn_identConfig(const std::string &filepath,
         id_config_file >> kite_params_in_dir;
         id_config_file >> kite_params_in_filename;
         id_config_file >> nIt;
+        id_config_file >> kite_params_warmStart; //_int;
+
+        //kite_params_warmStart = static_cast<bool>(kite_params_warmStart_int);
 
         kite_params_in_dir.append("/");
 
@@ -229,7 +235,8 @@ void readIn_sequenceData(const std::string &seq_dir, const FlightMetaData &fligh
 
                          DM &id_time, DM &id_states_woTime, DM &id_controls_rev_woTime,
                          int &windFrom_deg, double &windSpeed, double &tf,
-                         std::string &kite_baseParams_dir, std::string &kite_baseParams_filename, int &nIt) {
+                         std::string &kite_baseParams_dir, std::string &kite_baseParams_filename,
+                         int &nIt, bool &kite_params_warmStart) {
 
     /* States */
     DM id_states_wTime;
@@ -257,7 +264,7 @@ void readIn_sequenceData(const std::string &seq_dir, const FlightMetaData &fligh
     /* Ident config */
     readIn_identConfig(seq_dir + "identConfig.txt",
 
-                       kite_baseParams_dir, kite_baseParams_filename, nIt);
+                       kite_baseParams_dir, kite_baseParams_filename, nIt, kite_params_warmStart);
 }
 
 
@@ -270,23 +277,23 @@ void get_costMatrix(const std::string &identManeuver,
 
         Q = SX::diag(SX({1e2, 0, 1e2,
                          0, 1e2, 0,
-                         1e2, 1e2, 1e2,
-                         1e2, 1e2, 1e2, 1e2}));
+                         0, 0, 1e2,
+                         1e2, 0, 1e2, 0}));
     }
 
     if (identManeuver == "identRoll") {
 
         Q = SX::diag(SX({0, 1e2, 0,
                          1e2, 0, 1e2,
-                         1e2, 1e2, 1e2,
-                         1e2, 1e2, 1e2, 1e2}));
+                         1e2, 1e2, 1e1,
+                         1e2, 1e2, 0, 1e2}));
     }
 
 }
 
 void get_kiteDynamics(const std::string &filepath, const double windFrom_deg, const double windSpeed,
 
-                     KiteDynamics &kite, KiteDynamics &kite_int) {
+                      KiteDynamics &kite, KiteDynamics &kite_int) {
 
     KiteProperties kite_props = kite_utils::LoadProperties(filepath);
     kite_props.Wind.WindFrom_deg = windFrom_deg;
@@ -303,7 +310,7 @@ void get_kiteDynamics(const std::string &filepath, const double windFrom_deg, co
 
 void create_nlpSolver(const SX &opt_var, const SX &fitting_error, const SX &diff_constr,
 
-                     Function &nlpSolver) {
+                      Function &nlpSolver) {
 
     /** formulate NLP */
     SXDict NLP;
@@ -324,7 +331,7 @@ void create_nlpSolver(const SX &opt_var, const SX &fitting_error, const SX &diff
 
 void setup_optimizationParameters(const KiteProperties &kite_props, const std::string &identManeuver,
 
-                                 DM &REF_P, DM &LBP, DM &UBP, std::list<Parameter> &parameterList) {
+                                  DM &REF_P, DM &LBP, DM &UBP, std::list<Parameter> &parameterList) {
 
     /** parameter bounds preparation */
     /** --------------------- **/
@@ -522,10 +529,10 @@ void setup_optimizationParameters(const KiteProperties &kite_props, const std::s
 }
 
 void get_optimizationVarBounds(const DM &LBX, const DM &UBX, const int &num_segments, const int &poly_order,
-                              const DM &LBU, const DM &UBU,
-                              const DM &LBP, const DM &UBP,
+                               const DM &LBU, const DM &UBU,
+                               const DM &LBP, const DM &UBP,
 
-                              SX &lbx, SX &ubx) {
+                               SX &lbx, SX &ubx) {
 
     /** Optimization variable bounds (inequality (box) constraints) **/
     /* Add state bounds for each DATA_POINT (replicate vector for one DATA_POINT) */
@@ -617,9 +624,9 @@ void write_trajectoryFile(const DM &traj, const std::string &filepath) {
 }
 
 void print_singleParameterOutput(const int paramNumber, const std::string &paramName,
-                                const double &paramFound, const double &param_LB, const double &param_UB,
-                                const double &param_sens, const double &sensitivity_max,
-                                const double &lagrangeScore = 0) {
+                                 const double &paramFound, const double &param_LB, const double &param_UB,
+                                 const double &param_sens, const double &sensitivity_max,
+                                 const double &lagrangeScore = 0) {
 
     const int p = 4;
     const int w = 1 + 2 + 1 + p; // minus, 2 digits, decimal, 4 digits
@@ -738,10 +745,10 @@ void printWrite_parametersFound(std::list<Parameter> &parameterList, const std::
         int i = param.id;
 
         print_singleParameterOutput(i, param.name,
-                                   new_params_vec[i],
-                                   static_cast<double>(LBP(i)),
-                                   static_cast<double>(UBP(i)),
-                                   param.sensitivity, sensitivity_max);
+                                    new_params_vec[i],
+                                    static_cast<double>(LBP(i)),
+                                    static_cast<double>(UBP(i)),
+                                    param.sensitivity, sensitivity_max);
     }
     std::cout << "\nFitting error = " << static_cast<double>(fitting_error_evaluated) << "\n";
 
@@ -841,17 +848,17 @@ int main() {
     for (const auto &flight : flights) {
 
         std::cout << std::left
-                  << "\nData sequence:"
-                  << "\n" << std::setw(8) << "Session" << " " << flight.session
-                  << "\n" << std::setw(8) << "Flight" << " " << flight.number
-                  << "\n" << std::setw(8) << "Sequence" << " " << flight.seq << "\n";
+                  << "\n---------------------------------------------------------"
+                  << "\nData: "
+                  << flight.session << "-" << flight.number << "-" << flight.seq
+                  << " (Session-Flight-Sequence)\n";
 
         /* Construct sequence directory path */
         std::string seq_dir;
         get_seqDir(flightDataDir, flight,
 
                    seq_dir);
-        std::cout << "Current sequence directory: " << seq_dir << "\n";
+        std::cout << "Directory: " << seq_dir << "\n";
 
 
         /** Read in all sequence data **/
@@ -867,14 +874,16 @@ int main() {
         std::string kite_baseParams_dir;
         std::string kite_baseParams_filename;
         int nIt{0};
+        bool kite_params_warmStart{false};
 
         readIn_sequenceData(seq_dir, flight, 1 + dimx, 1 + dimu, DATA_POINTS,
 
                             id_time, id_states_woTime, id_controls_rev_woTime,
                             windFrom_deg, windSpeed, tf,
-                            kite_baseParams_dir, kite_baseParams_filename, nIt);
+                            kite_baseParams_dir, kite_baseParams_filename, nIt, kite_params_warmStart);
         //std::cout << "Measured Control trajectory: size " << id_control.size() << id_control << "\n";
         //std::cout << "tf = " << tf << "\n";
+
 
 
         /** Control bounds **/
@@ -909,7 +918,7 @@ int main() {
         KiteDynamics kite, kite_int;
         get_kiteDynamics(kite_params_in_filepath, windFrom_deg, windSpeed,
 
-                        kite, kite_int);
+                         kite, kite_int);
 
         Function DynamicsFunc = kite.getNumericDynamics();
         //SX X = kite.getSymbolicState();
@@ -926,7 +935,7 @@ int main() {
         Function nlp_solver_func;
         create_nlpSolver(opt_var, fitting_error, diff_constr,
 
-                        nlp_solver_func);
+                         nlp_solver_func);
 
         std::cout << "OK: Solver set up\n";
 
@@ -938,15 +947,24 @@ int main() {
 
         for (int iIt = 0; iIt < nIt; ++iIt) {
 
-            std::cout << "\nIteration " << iIt + 1 << "\n";
-
             /** Select parameter IN file for current iteration **/
             if (iIt > 0) {
                 /* There was an iteration before, use iterated param file. */
                 kite_params_in_filepath = kite_params_out_filepath;
             }
-            std::cout << "Kite param file IN: " << kite_params_in_filepath << "\n";
 
+            std::string kite_params_out_dir = seq_dir + "params_new/" + kite_baseParams_filename + "/";
+            std::string afterItStr = "afterIt_" + std::to_string(iIt + 1);
+            kite_params_out_filepath = kite_params_out_dir + afterItStr + ".yaml";
+
+            if (kite_params_warmStart) {
+                if (kite_utils::file_exists(kite_params_out_filepath)) {
+                    continue;
+                }
+            }
+
+            std::cout << "\nIteration " << iIt + 1 << "\n";
+            std::cout << "Kite param file IN: " << kite_params_in_filepath << "\n";
             KiteProperties kite_props_in = kite_utils::LoadProperties(kite_params_in_filepath);
 
             /* Parameter bounds */
@@ -959,7 +977,7 @@ int main() {
 
             setup_optimizationParameters(kite_props_in, flight.maneuver,
 
-                                        REF_P, LBP, UBP, parameterList);
+                                         REF_P, LBP, UBP, parameterList);
             std::cout << "OK: Parameter preparation\n";
 
 
@@ -968,10 +986,10 @@ int main() {
             SX lbx, ubx;
 
             get_optimizationVarBounds(LBX, UBX, num_segments, poly_order,
-                                     LBU, UBU,
-                                     LBP, UBP,
+                                      LBU, UBU,
+                                      LBP, UBP,
 
-                                     lbx, ubx);
+                                      lbx, ubx);
 
             SX lbg = SX::zeros(diff_constr.size());
             SX ubg = SX::zeros(diff_constr.size());
@@ -1059,12 +1077,7 @@ int main() {
             DM lam_x = res.at("lam_x");
 
             /** Output ============================================================================================= **/
-            std::string kite_params_out_dir = seq_dir + "params_new/" + kite_baseParams_filename + "/";
-            std::string afterItStr = "afterIt_" + std::to_string(iIt + 1);
-
             /** Write new parameters to file **/
-            kite_params_out_filepath = kite_params_out_dir + afterItStr + ".yaml";
-
             /* Extract optimized parameters from optimization result */
             DM new_params = result(Slice(result.size1() - varp.size1(), result.size1()));
             std::vector<double> new_params_vec = new_params.nonzeros();
