@@ -126,6 +126,8 @@ public:
 
     KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const bool &id);
 
+    KiteDynamics() = default;
+
     virtual ~KiteDynamics() {}
 
     /** public methods */
