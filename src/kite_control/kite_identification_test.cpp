@@ -999,7 +999,7 @@ int main() {
             DM feasible_state;
 
             /* Initial state: First column of id_states */
-            DM init_state = id_states_woTime(Slice(0, id_states_woTime.size1()), 0);
+            DM init_state = id_states_woTime(Slice(0, dimx), 0);
 
             /** if the solutions available load them from file */
             if (kite_utils::file_exists(seq_dir + "id_x0.txt")) {
