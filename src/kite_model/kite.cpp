@@ -414,6 +414,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     SX v_dot, w_dot, r_dot, q_dot;
     SX Faero_b, T_b;
 
+    /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
     getModel<double, double, double>(g, rho, windFrom_deg, windSpeed,
                                      b, c, AR, S,
                                      Mass, Ixx, Iyy, Izz, Ixz,
@@ -430,7 +431,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** Complete dynamics of the Kite */
     auto state = SX::vertcat({v, w, r, q});
     auto control = SX::vertcat({T, dE, dR, dA});
-
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
     Function dyn_func = Function("dynamics", {state, control}, {dynamics});
@@ -585,6 +585,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
                               CLde, Cmde
                              }); // 10 longitudinal parameters
 
+        /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
         getModel<double, SX, double>(g, rho, windFrom_deg, windSpeed,
                                      b, c, AR, S,
                                      Mass, Ixx, Iyy, Izz, Ixz,
@@ -655,6 +656,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
                               CYdr, Cndr, Cldr, Clda, Cnda
                              }); // 14 lateral parameters
 
+        /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
         getModel<double, double, SX>(g, rho, windFrom_deg, windSpeed,
                                      b, c, AR, S,
                                      Mass, Ixx, Iyy, Izz, Ixz,
@@ -687,12 +689,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** Complete dynamics of the Kite */
     auto state = SX::vertcat({v, w, r, q});
     auto control = SX::vertcat({T, dE, dR, dA});
-//    auto params = SX::vertcat({CL0, CLa_tot, CD0_tot, CYb, Cm0, Cma, Cnb, Clb,
-//                               CLq, Cmq, CYr, Cnr, Clr, CYp, Clp, Cnp,
-//                               CLde, CYdr, Cmde, Cndr, Cldr, Clda, Cnda,
-// //                               Ks, Kd, Lt, rx, ry, rz,
-//                              });
-
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
     Function dyn_func = Function("dynamics", {state, control, params}, {dynamics});

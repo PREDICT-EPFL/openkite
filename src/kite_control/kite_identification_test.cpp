@@ -1001,7 +1001,7 @@ int main() {
             setup_optimizationParameters(kite_props_in, identManeuver,
 
                                          REF_P, LBP, UBP, parameterList);
-            std::cout << "OK: Parameter preparation\n";
+            std::cout << "Parameter preparation OK\n";
 
 
             /** set default args */
@@ -1067,6 +1067,8 @@ int main() {
 //                std::cout << "x0: " <<  casadi::DM::vertcat({feasible_traj, REF_P}).size() <<  casadi::DM::vertcat({feasible_traj, REF_P}) << "\n";
 //                std::cout << "lam_g0: " <<  DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())}).size() <<  DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())}) << "\n";
 //                std::cout << "lam_x0: " << feasible_guess.at("lam_g").size() << feasible_guess.at("lam_g") << "\n";
+
+                std::cout << "Initial guess found.\n";
             }
 
             /* Set initial state
@@ -1078,7 +1080,7 @@ int main() {
             ubx(Slice(idx_in, idx_out), 0) = id_state0;
 
             /** Solve the optimization problem ===================================================================== **/
-            std::cout << "\nSolving the optimization problem:\n";
+            std::cout << "\nSolving the optimization problem ...\n";
 
             ARG["lbx"] = lbx;
             ARG["ubx"] = ubx;
@@ -1087,12 +1089,26 @@ int main() {
 
             DMDict res = nlp_solver_func(ARG);
 
-            DM result = res.at("x");
-            DM lam_x = res.at("lam_x");
+            /* Check if optimization was infeasible. */
+            Dict stats = nlp_solver_func.stats();
+            std::string solve_status = static_cast<std::string>(stats["return_status"]);
+            if (solve_status == "Invalid_Number_Detected") {
+                //std::cout << "X0 : " << ARG["x0"] << "\n";
+                std::cout << "Invalid number detected!\n";
+            }
+            if (solve_status == "Infeasible_Problem_Detected") {
+                std::cout << "Infeasible problem detected. Stopping iterations on this sequence. \n";
+                iIt = nIt;
+                continue;
+            }
 
+            /* Save results for next iteration */
             temp_x = res.at("x");
             temp_lam_x = res.at("lam_x");
             temp_lam_g = res.at("lam_g");
+
+            DM result = res.at("x");
+            DM lam_x = res.at("lam_x");
 
             /** Output ============================================================================================= **/
             /** Write new parameters to file **/
