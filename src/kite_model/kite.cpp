@@ -125,6 +125,7 @@ namespace kite_utils {
 
 
 KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps) {
+
     /** enviromental constants */
     const double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
     const double rho = 1.2985; /** standard atmospheric density [kg/m3] [standard Atmosphere 1976] */
@@ -445,6 +446,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 }
 
 KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const bool &id) {
+
     /** enviromental constants */
     const double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
     const double rho = 1.2985; /** standard atmospheric density [kg/m3] [Standard Atmosphere 1976] */
@@ -544,6 +546,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** END OF LONGITUDINAL IDENTIFICATION PARAMETERS --------------------------------------------------------------- */
 
     /** LATERAL IDENTIFICATION PARAMETERS --------------------------------------------------------------------------- */
+//    double imuPitchOffset = KiteProps.Geometry.ImuPitchOffset_deg * M_PI / 180.0;
+
 //    double CL0 = KiteProps.Aerodynamics.Cl0;                // Identify also in Lateral identification?
 //    //double CL0_t = KiteProps.Aerodynamics.CL0_tail;
 //    double CLa_tot = KiteProps.Aerodynamics.CLa_total;      // Identify also in Lateral identification?
