@@ -124,11 +124,198 @@ namespace kite_utils {
 }
 
 
+template<typename P, typename PO, typename PA>
+void
+KiteDynamics::getModel(P &g, P &rho, P &windFrom_deg, P &windSpeed, P &b, P &c, P &AR, P &S, P &Mass, P &Ixx, P &Iyy,
+                       P &Izz, P &Ixz, PO &imuPitchOffset, PO &CL0, PO &CLa_tot, P &e_o, PO &CD0_tot, PA &CYb, PO &Cm0,
+                       PO &Cma, P &Cn0, PA &Cnb, P &Cl0, PA &Clb, PO &CLq, PO &Cmq, PA &CYr, PA &Cnr, PA &Clr, PA &CYp,
+                       PA &Clp, PA &Cnp, PO &CLde, PA &CYdr, PO &Cmde, PA &Cndr, PA &Cldr, PA &Clda, PA &Cnda,
+
+                       casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q, casadi::SX &T, casadi::SX &dE,
+                       casadi::SX &dR, casadi::SX &dA, casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot,
+                       casadi::SX &q_dot, casadi::SX &Faero_b, casadi::SX &T_b) {
+
+
+/** ============================================================================================================ **/
+/** Start of model **/
+
+/** -------------------------- **/
+/** State variables definition **/
+/** -------------------------- **/
+    v = SX::sym("v", 3); /**  linear velocity of the CoG in the Body Reference Frame (BRF) [m/s] **/
+    w = SX::sym("w", 3); /**  glider angular velocity in BRF [rad/s]                             **/
+    r = SX::sym("r", 3); /**  position of the CoG in the Inertial Reference Frame (IRF) [m]      **/
+    q = SX::sym("q", 4); /**  body attitude relative to IRF [unit quaternion]                    **/
+
+/** ---------------------------- **/
+/** Control variables definition **/
+/** ---------------------------- **/
+/** @todo: consider more detailed propeller model **/
+    T = SX::sym("T");   /** propeller propulsion : applies along X-axis in BRF [N] **/
+    dE = SX::sym("dE"); /** elevator deflection [positive causing negative pitch movement (nose down)] [rad] **/
+    dR = SX::sym("dR"); /** rudder deflection [positive causing negative yaw movement (nose left)] [rad] **/
+    dA = SX::sym("dA"); /** aileron deflection [positive causing negative roll movement (right wing up)] [rad] **/
+//SX dF = SX::sym("dF"); /** flaps deflection [reserved, but not used]               **/
+
+    SX WS = SX::sym("WS", 3);                 /** Wind speed (velocity) **/
+    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
+    WS = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
+
+    SX q_imu = SX::vertcat({cos(-imuPitchOffset / 2.0),
+                            0.0,
+                            sin(-imuPitchOffset / 2.0),
+                            0.0}); /** IMU to body **/
+    SX q_corrected = kmath::quat_multiply(q,
+                                          q_imu); /** Rotation from NED to body frame, corrected by IMU pitch offset **/
+
+    SX qWS = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, WS}));
+    SX qWS_q = kmath::quat_multiply(qWS, q_corrected);
+    SX WS_b = qWS_q(Slice(1, 4), 0);            /** Wind velocity in body frame **/
+
+    SX Va = v - WS_b;         /** Apparent velocity in body frame **/
+    SX V = SX::norm_2(Va);     /** Apparent speed **/
+    SX V2 = SX::dot(Va, Va);   /** Apparent speed **/
+
+    SX ss = asin(Va(1) / (V + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
+    SX aoa = atan2(Va(2), (Va(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
+    SX dyn_press = 0.5 * rho * V2;         /** dynamic pressure **/
+
+    SX CD = CD0_tot + pow(CL0 + CLa_tot * aoa, 2) / (pi * e_o * AR); /** total drag coefficient **/
+
+/** ------------------------- **/
+/** Dynamic Equations: Forces */
+/** ------------------------- **/
+    SX LIFT = (CL0 + CLa_tot * aoa) * dyn_press * S +
+              (0.25 * CLq * c * S * rho) * V * w(1);
+    SX DRAG = CD * dyn_press * S;
+    SX SF = (CYb * ss + CYdr * dR) * dyn_press * S +
+            0.25 * (CYr * w(2) + CYp * w(0)) * (b * rho * S) * V;
+
+/** Compute transformation between WRF and BRF: qw_b **/
+/** qw_b = q(aoa) * q(-ss);                           **/
+    SX q_aoa = SX::vertcat({cos(aoa / 2), 0, sin(aoa / 2), 0});
+    SX q_ss = SX::vertcat({cos(-ss / 2), 0, 0, sin(-ss / 2)});
+
+    SX qw_b = kmath::quat_multiply(q_aoa, q_ss);
+    SX qw_b_inv = kmath::quat_inverse(qw_b);
+
+/** Aerodynamic forces in BRF: Faer0_b = qw_b * [0; -DRAG; SF; -LIFT] * qw_b_inv */
+    SX qF_tmp = kmath::quat_multiply(qw_b_inv, SX::vertcat({0, -DRAG, 0, -LIFT}));
+    SX qF_q = kmath::quat_multiply(qF_tmp, qw_b);
+    Faero_b = qF_q(Slice(1, 4), 0);
+
+    SX Zde = (-CLde) * dE * dyn_press * S;
+    SX FdE_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa),
+                                      SX::vertcat({0, 0, 0, Zde}));
+    SX qFdE = kmath::quat_multiply(FdE_tmp, q_aoa);
+    SX FdE = qFdE(Slice(1, 4), 0);
+
+    Faero_b = Faero_b + FdE + SX::vertcat({0, SF, 0});
+
+/** Gravitational acceleration in BRF */
+    SX qG = kmath::quat_multiply(kmath::quat_inverse(q),
+                                 SX::vertcat({0, 0, 0, g}));
+    SX qG_q = kmath::quat_multiply(qG, q_corrected);
+    SX g_b = qG_q(Slice(1, 4), 0);
+
+/** Propulsion force in BRF */
+// const double p1 = -0.007752958684034;
+// const double p2 = -0.137115918638887;
+// const double p3 = 9.327531598002182;
+// normalize to get 0...1
+    const double p1 = -0.00083119;
+    const double p2 = -0.014700129;
+    T_b = SX::vertcat({T * (p1 * V2 + p2 * V + 1.0), 0, 0});
+//SX T_b = SX::vertcat({T, 0, 0});
+
+/** Tether force */
+//    /** value: using smooth ramp approximation */
+//    SX d_ = SX::norm_2(r);
+//    /** spring term */
+//    /** @todo: put all coefficients in the config */
+//    //const double Ks = 15 * Mass;
+//    //const double Kd = 10 * Mass;
+//    SX Rv = ((d_ - Lt));
+//    SX Rs = -Rv * (r / d_);
+//    /** damping term */
+//    SX qvi = kmath::quat_multiply(q, SX::vertcat({0, v}));
+//    SX qvi_q = kmath::quat_multiply(qvi, kmath::quat_inverse(q));
+//    SX vi = qvi_q(Slice(1, 4), 0);
+//    SX Rd = (-r / d_) * SX::dot(r, vi) / d_;
+//    SX R = (Ks * Rs + Kd * Rd) * kmath::heaviside(d_ - Lt, 1);
+//
+//    /** BRF */
+//    SX qR = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, R}));
+//    SX qR_q = kmath::quat_multiply(qR, q_corrected);
+//    SX R_b = qR_q(Slice(1, 4), 0);
+
+/** Total external forces devided by glider's mass (linear acceleration) */
+    v_dot = (Faero_b + T_b) / Mass + g_b - SX::cross(w, v);
+//    auto v_dot = (Faero_b + T_b + R_b) / Mass + g_b - SX::cross(w, v);
+
+/** ------------------------- */
+/** Dynamic Equation: Moments */
+/** ------------------------- */
+/** Rolling Aerodynamic Moment */
+    SX L = (Cl0 + Clb * ss + Cldr * dR + Clda * dA) * dyn_press * S * b +
+           (Clr * w(2) + Clp * w(0)) * (0.25 * rho * std::pow(b, 2) * S) * V;
+
+/** Pitching Aerodynamic Moment */
+    SX M = (Cm0 + Cma * aoa + Cmde * dE) * dyn_press * S * c +
+           Cmq * (0.25 * S * std::pow(c, 2) * rho) * w(1) * V;
+
+/** Yawing Aerodynamic Moment */
+    SX N = (Cn0 + Cnb * ss + Cndr * dR + Cnda * dA) * dyn_press * S * b +
+           (Cnp * w(0) + Cnr * w(2)) * (0.25 * S * std::pow(b, 2) * rho) * V;
+
+/** Aircraft Inertia Matrix */
+    SXVector j_vec{Ixx, Iyy, Izz};
+    auto J = SX::diag(SX::vertcat(j_vec));
+    J(0, 2) =
+            Ixz;
+    J(2, 0) =
+            Ixz;
+
+/** Angular motion equationin BRF */
+/** Moments transformation SRF -> BRF */
+    SX T_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa),
+                                    SX::vertcat({0, L, M, N}));
+    SX Trot = kmath::quat_multiply(T_tmp, q_aoa);
+    auto Maero = Trot(Slice(1, 4), 0);
+
+/** Moment introduced by tether */
+//    //DM tether_arm = DM({rx, ry, rz});
+//    SX tether_arm = SX::vertcat({rx, ry, rz});
+//    SX Mt = SX::cross(tether_arm, R_b);
+//
+//    auto w_dot = SX::mtimes(SX::inv(J), (Maero + Mt - SX::cross(w, SX::mtimes(J, w))));
+    w_dot = SX::mtimes(SX::inv(J), (Maero - SX::cross(w, SX::mtimes(J, w))));
+
+/** ----------------------------- */
+/** Kinematic Equations: Position */
+/** ----------------------------- */
+/** Aircraft position in the IRF  */
+    SX qv = kmath::quat_multiply(q, SX::vertcat({0, v}));
+    SX qv_q = kmath::quat_multiply(qv, kmath::quat_inverse(q));
+    r_dot = qv_q(Slice(1, 4), 0);
+
+/** ----------------------------- */
+/** Kinematic Equations: Attitude */
+/** ----------------------------- */
+/** Aircraft attitude wrt IRF  */
+    double lambda = -5;
+    q_dot = 0.5 * kmath::quat_multiply(q, SX::vertcat({0, w})) +
+            0.5 * lambda * q_corrected * (SX::dot(q_corrected, q_corrected) - 1);
+
+/** End of dynamics model **/
+/** ============================================================================================================ **/
+}
+
 KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps) {
 
     /** enviromental constants */
-    const double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
-    const double rho = 1.2985; /** standard atmospheric density [kg/m3] [standard Atmosphere 1976] */
+    double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
+    double rho = 1.2985; /** standard atmospheric density [kg/m3] [standard Atmosphere 1976] */
 
     /** --------------------- **/
     /** Wind properties       **/
@@ -222,177 +409,23 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     //    double ry = KiteProps.Tether.ry;
     //    double rz = KiteProps.Tether.rz;
 
-    /** ============================================================================================================ **/
-    /** Start of model **/
+    SX v, w, r, q;
+    SX T, dE, dR, dA;
+    SX v_dot, w_dot, r_dot, q_dot;
+    SX Faero_b, T_b;
 
-    /** -------------------------- **/
-    /** State variables definition **/
-    /** -------------------------- **/
-    SX v = SX::sym("v", 3); /**  linear velocity of the CoG in the Body Reference Frame (BRF) [m/s] **/
-    SX w = SX::sym("w", 3); /**  glider angular velocity in BRF [rad/s]                             **/
-    SX r = SX::sym("r", 3); /**  position of the CoG in the Inertial Reference Frame (IRF) [m]      **/
-    SX q = SX::sym("q", 4); /**  body attitude relative to IRF [unit quaternion]                    **/
+    getModel<double, double, double>(g, rho, windFrom_deg, windSpeed,
+                                     b, c, AR, S,
+                                     Mass, Ixx, Iyy, Izz, Ixz,
+                                     imuPitchOffset, CL0, CLa_tot, e_o,
+                                     CD0_tot, CYb, Cm0, Cma, Cn0, Cnb, Cl0, Clb,
+                                     CLq, Cmq, CYr, Cnr, Clr, CYp, Clp, Cnp,
+                                     CLde, CYdr, Cmde, Cndr, Cldr, Clda, Cnda,
 
-    /** ---------------------------- **/
-    /** Control variables definition **/
-    /** ---------------------------- **/
-    /** @todo: consider more detailed propeller model **/
-    SX T = SX::sym("T");   /** propeller propulsion : applies along X-axis in BRF [N] **/
-    SX dE = SX::sym("dE"); /** elevator deflection [positive causing negative pitch movement (nose down)] [rad] **/
-    SX dR = SX::sym("dR"); /** rudder deflection [positive causing negative yaw movement (nose left)] [rad] **/
-    SX dA = SX::sym("dA"); /** aileron deflection [positive causing negative roll movement (right wing up)] [rad] **/
-    //SX dF = SX::sym("dF"); /** flaps deflection [reserved, but not used]               **/
-
-    SX WS = SX::sym("WS", 3);                 /** Wind speed (velocity) **/
-    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
-    WS = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
-
-    SX q_imu = SX::vertcat({cos(-imuPitchOffset / 2.0),
-                            0.0,
-                            sin(-imuPitchOffset / 2.0),
-                            0.0}); /** IMU to body **/
-    SX q_corrected = kmath::quat_multiply(q,
-                                          q_imu); /** Rotation from NED to body frame, corrected by IMU pitch offset **/
-
-    SX qWS = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, WS}));
-    SX qWS_q = kmath::quat_multiply(qWS, q_corrected);
-    SX WS_b = qWS_q(Slice(1, 4), 0);            /** Wind velocity in body frame **/
-
-    SX Va = v - WS_b;         /** Apparent velocity in body frame **/
-    SX V = SX::norm_2(Va);     /** Apparent speed **/
-    SX V2 = SX::dot(Va, Va);   /** Apparent speed **/
-
-    SX ss = asin(Va(1) / (V + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
-    SX aoa = atan2(Va(2), (Va(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
-    SX dyn_press = 0.5 * rho * V2;         /** dynamic pressure **/
-
-    SX CD = CD0_tot + pow(CL0 + CLa_tot * aoa, 2) / (pi * e_o * AR); /** total drag coefficient **/
-
-    /** ------------------------- **/
-    /** Dynamic Equations: Forces */
-    /** ------------------------- **/
-    SX LIFT = (CL0 + CLa_tot * aoa) * dyn_press * S +
-              (0.25 * CLq * c * S * rho) * V * w(1);
-    SX DRAG = CD * dyn_press * S;
-    SX SF = (CYb * ss + CYdr * dR) * dyn_press * S +
-            0.25 * (CYr * w(2) + CYp * w(0)) * (b * rho * S) * V;
-
-    /** Compute transformation between WRF and BRF: qw_b **/
-    /** qw_b = q(aoa) * q(-ss);                           **/
-    SX q_aoa = SX::vertcat({cos(aoa / 2), 0, sin(aoa / 2), 0});
-    SX q_ss = SX::vertcat({cos(-ss / 2), 0, 0, sin(-ss / 2)});
-
-    SX qw_b = kmath::quat_multiply(q_aoa, q_ss);
-    SX qw_b_inv = kmath::quat_inverse(qw_b);
-
-    /** Aerodynamic forces in BRF: Faer0_b = qw_b * [0; -DRAG; SF; -LIFT] * qw_b_inv */
-    SX qF_tmp = kmath::quat_multiply(qw_b_inv, SX::vertcat({0, -DRAG, 0, -LIFT}));
-    SX qF_q = kmath::quat_multiply(qF_tmp, qw_b);
-    SX Faero_b = qF_q(Slice(1, 4), 0);
-
-    SX Zde = (-CLde) * dE * dyn_press * S;
-    SX FdE_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa),
-                                      SX::vertcat({0, 0, 0, Zde}));
-    SX qFdE = kmath::quat_multiply(FdE_tmp, q_aoa);
-    SX FdE = qFdE(Slice(1, 4), 0);
-
-    Faero_b = Faero_b + FdE + SX::vertcat({0, SF, 0});
-
-    /** Gravitational acceleration in BRF */
-    SX qG = kmath::quat_multiply(kmath::quat_inverse(q),
-                                 SX::vertcat({0, 0, 0, g}));
-    SX qG_q = kmath::quat_multiply(qG, q_corrected);
-    SX g_b = qG_q(Slice(1, 4), 0);
-
-    /** Propulsion force in BRF */
-    // const double p1 = -0.007752958684034;
-    // const double p2 = -0.137115918638887;
-    // const double p3 = 9.327531598002182;
-    // normalize to get 0...1
-    const double p1 = -0.00083119;
-    const double p2 = -0.014700129;
-    SX T_b = SX::vertcat({T * (p1 * V2 + p2 * V + 1.0), 0, 0});
-    //SX T_b = SX::vertcat({T, 0, 0});
-
-    /** Tether force */
-//    /** value: using smooth ramp approximation */
-//    SX d_ = SX::norm_2(r);
-//    /** spring term */
-//    /** @todo: put all coefficients in the config */
-//    //const double Ks = 15 * Mass;
-//    //const double Kd = 10 * Mass;
-//    SX Rv = ((d_ - Lt));
-//    SX Rs = -Rv * (r / d_);
-//    /** damping term */
-//    SX qvi = kmath::quat_multiply(q, SX::vertcat({0, v}));
-//    SX qvi_q = kmath::quat_multiply(qvi, kmath::quat_inverse(q));
-//    SX vi = qvi_q(Slice(1, 4), 0);
-//    SX Rd = (-r / d_) * SX::dot(r, vi) / d_;
-//    SX R = (Ks * Rs + Kd * Rd) * kmath::heaviside(d_ - Lt, 1);
-//
-//    /** BRF */
-//    SX qR = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, R}));
-//    SX qR_q = kmath::quat_multiply(qR, q_corrected);
-//    SX R_b = qR_q(Slice(1, 4), 0);
-
-    /** Total external forces devided by glider's mass (linear acceleration) */
-    auto v_dot = (Faero_b + T_b) / Mass + g_b - SX::cross(w, v);
-//    auto v_dot = (Faero_b + T_b + R_b) / Mass + g_b - SX::cross(w, v);
-
-    /** ------------------------- */
-    /** Dynamic Equation: Moments */
-    /** ------------------------- */
-    /** Rolling Aerodynamic Moment */
-    SX L = (Cl0 + Clb * ss + Cldr * dR + Clda * dA) * dyn_press * S * b +
-           (Clr * w(2) + Clp * w(0)) * (0.25 * rho * std::pow(b, 2) * S) * V;
-
-    /** Pitching Aerodynamic Moment */
-    SX M = (Cm0 + Cma * aoa + Cmde * dE) * dyn_press * S * c +
-           Cmq * (0.25 * S * std::pow(c, 2) * rho) * w(1) * V;
-
-    /** Yawing Aerodynamic Moment */
-    SX N = (Cn0 + Cnb * ss + Cndr * dR + Cnda * dA) * dyn_press * S * b +
-           (Cnp * w(0) + Cnr * w(2)) * (0.25 * S * std::pow(b, 2) * rho) * V;
-
-    /** Aircraft Inertia Matrix */
-    SXVector j_vec{Ixx, Iyy, Izz};
-    auto J = SX::diag(SX::vertcat(j_vec));
-    J(0, 2) = Ixz;
-    J(2, 0) = Ixz;
-
-    /** Angular motion equationin BRF */
-    /** Moments transformation SRF -> BRF */
-    SX T_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa),
-                                    SX::vertcat({0, L, M, N}));
-    SX Trot = kmath::quat_multiply(T_tmp, q_aoa);
-    auto Maero = Trot(Slice(1, 4), 0);
-
-    /** Moment introduced by tether */
-//    //DM tether_arm = DM({rx, ry, rz});
-//    SX tether_arm = SX::vertcat({rx, ry, rz});
-//    SX Mt = SX::cross(tether_arm, R_b);
-//
-//    auto w_dot = SX::mtimes(SX::inv(J), (Maero + Mt - SX::cross(w, SX::mtimes(J, w))));
-    auto w_dot = SX::mtimes(SX::inv(J), (Maero - SX::cross(w, SX::mtimes(J, w))));
-
-    /** ----------------------------- */
-    /** Kinematic Equations: Position */
-    /** ----------------------------- */
-    /** Aircraft position in the IRF  */
-    SX qv = kmath::quat_multiply(q, SX::vertcat({0, v}));
-    SX qv_q = kmath::quat_multiply(qv, kmath::quat_inverse(q));
-    auto r_dot = qv_q(Slice(1, 4), 0);
-
-    /** ----------------------------- */
-    /** Kinematic Equations: Attitude */
-    /** ----------------------------- */
-    /** Aircraft attitude wrt IRF  */
-    double lambda = -5;
-    auto q_dot = 0.5 * kmath::quat_multiply(q, SX::vertcat({0, w})) +
-                 0.5 * lambda * q_corrected * (SX::dot(q_corrected, q_corrected) - 1);
-
-    /** End of dynamics model **/
-    /** ============================================================================================================ **/
+                                     v, w, r, q,
+                                     T, dE, dR, dA,
+                                     v_dot, w_dot, r_dot, q_dot,
+                                     Faero_b, T_b);
 
     /** Complete dynamics of the Kite */
     auto state = SX::vertcat({v, w, r, q});
@@ -445,11 +478,12 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 
 }
 
-KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const bool &id) {
+KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
+                           const IdentMode &identMode) {
 
     /** enviromental constants */
-    const double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
-    const double rho = 1.2985; /** standard atmospheric density [kg/m3] [Standard Atmosphere 1976] */
+    double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
+    double rho = 1.2985; /** standard atmospheric density [kg/m3] [Standard Atmosphere 1976] */
 
     /** --------------------- **/
     /** Wind properties       **/
@@ -490,116 +524,151 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 
     SX params;
 
-    /** LONGITUDINAL IDENTIFICATION PARAMETERS ---------------------------------------------------------------------- */
-    SX imuPitchOffset = SX::sym("imuPitchOffset");
-    SX CL0 = SX::sym("Cl0");            //double CL0 = KiteProps.Aerodynamics.CL0;
-    //double CL0_t = KiteProps.Aerodynamics.CL0_tail;
-    SX CLa_tot = SX::sym("Cla_tot");    //double CLa_tot = KiteProps.Aerodynamics.CLa_total;
-    //double CLa_w = KiteProps.Aerodynamics.CLa_wing;
-    //double CLa_t = KiteProps.Aerodynamics.CLa_tail;
-    double e_o = KiteProps.Aerodynamics.e_oswald;
+    SX v, w, r, q;
+    SX T, dE, dR, dA;
+    SX v_dot, w_dot, r_dot, q_dot;
+    SX Faero_b, T_b;
 
-    //double dw = CLa_tot / (pi * e_o * AR);             /** downwash acting at the tail [] **/
+    if (identMode == LONGITUDINAL) {
+        /** LONGITUDINAL IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
 
-    SX CD0_tot = SX::sym("CD0_tot");
-    //double CD0_w = KiteProps.Aerodynamics.CD0_wing;
-    //double CD0_t = KiteProps.Aerodynamics.CD0_tail;
-    double CYb = KiteProps.Aerodynamics.CYb;
-    //double CYb_vt = KiteProps.Aerodynamics.CYb_vtail;
-    SX Cm0 = SX::sym("Cm0");
-    SX Cma = SX::sym("Cma");
-    double Cn0 = KiteProps.Aerodynamics.Cn0;
-    double Cnb = KiteProps.Aerodynamics.Cnb;
-    double Cl0 = KiteProps.Aerodynamics.Cl0;
-    double Clb = KiteProps.Aerodynamics.Clb;
+        SX imuPitchOffset = SX::sym("imuPitchOffset");
+        SX CL0 = SX::sym("Cl0");            //double CL0 = KiteProps.Aerodynamics.CL0;
+        //double CL0_t = KiteProps.Aerodynamics.CL0_tail;
+        SX CLa_tot = SX::sym("Cla_tot");    //double CLa_tot = KiteProps.Aerodynamics.CLa_total;
+        //double CLa_w = KiteProps.Aerodynamics.CLa_wing;
+        //double CLa_t = KiteProps.Aerodynamics.CLa_tail;
+        double e_o = KiteProps.Aerodynamics.e_oswald;
 
-    SX CLq = SX::sym("CLq");
-    SX Cmq = SX::sym("Cmq");
-    double CYr = KiteProps.Aerodynamics.CYr;
-    double Cnr = KiteProps.Aerodynamics.Cnr;
-    double Clr = KiteProps.Aerodynamics.Clr;
-    double CYp = KiteProps.Aerodynamics.CYp;
-    double Clp = KiteProps.Aerodynamics.Clp;
-    double Cnp = KiteProps.Aerodynamics.Cnp;
+        //double dw = CLa_tot / (pi * e_o * AR);             /** downwash acting at the tail [] **/
 
-    /** ------------------------------ **/
-    /** Aerodynamic effects of control **/
-    /** ------------------------------ **/
-    SX CLde = SX::sym("CLde");
-    double CYdr = KiteProps.Aerodynamics.CYdr;
-    SX Cmde = SX::sym("Cmde");
-    double Cndr = KiteProps.Aerodynamics.Cndr;
-    double Cldr = KiteProps.Aerodynamics.Cldr;
-    //SX CDde = SX::sym("CDde");
-    double Clda = KiteProps.Aerodynamics.Clda;
-    double Cnda = KiteProps.Aerodynamics.Cnda;
+        SX CD0_tot = SX::sym("CD0_tot");
+        //double CD0_w = KiteProps.Aerodynamics.CD0_wing;
+        //double CD0_t = KiteProps.Aerodynamics.CD0_tail;
+        double CYb = KiteProps.Aerodynamics.CYb;
+        //double CYb_vt = KiteProps.Aerodynamics.CYb_vtail;
+        SX Cm0 = SX::sym("Cm0");
+        SX Cma = SX::sym("Cma");
+        double Cn0 = KiteProps.Aerodynamics.Cn0;
+        double Cnb = KiteProps.Aerodynamics.Cnb;
+        double Cl0 = KiteProps.Aerodynamics.Cl0;
+        double Clb = KiteProps.Aerodynamics.Clb;
 
-    //double CL_daoa = -2 * CLa_t * Vh * dw;
-    //double Cm_daoa = -2 * CLa_t * Vh * (lt/c) * dw;
+        SX CLq = SX::sym("CLq");
+        SX Cmq = SX::sym("Cmq");
+        double CYr = KiteProps.Aerodynamics.CYr;
+        double Cnr = KiteProps.Aerodynamics.Cnr;
+        double Clr = KiteProps.Aerodynamics.Clr;
+        double CYp = KiteProps.Aerodynamics.CYp;
+        double Clp = KiteProps.Aerodynamics.Clp;
+        double Cnp = KiteProps.Aerodynamics.Cnp;
 
-    params = SX::vertcat({imuPitchOffset,
-                          CL0, CLa_tot,
-                               CD0_tot, Cm0, Cma,
-                               CLq, Cmq,
-                               CLde, Cmde
-                              }); // 10 longitudinal parameters
-    /** END OF LONGITUDINAL IDENTIFICATION PARAMETERS --------------------------------------------------------------- */
+        /** ------------------------------ **/
+        /** Aerodynamic effects of control **/
+        /** ------------------------------ **/
+        SX CLde = SX::sym("CLde");
+        double CYdr = KiteProps.Aerodynamics.CYdr;
+        SX Cmde = SX::sym("Cmde");
+        double Cndr = KiteProps.Aerodynamics.Cndr;
+        double Cldr = KiteProps.Aerodynamics.Cldr;
+        //SX CDde = SX::sym("CDde");
+        double Clda = KiteProps.Aerodynamics.Clda;
+        double Cnda = KiteProps.Aerodynamics.Cnda;
 
-    /** LATERAL IDENTIFICATION PARAMETERS --------------------------------------------------------------------------- */
-//    double imuPitchOffset = KiteProps.Geometry.ImuPitchOffset_deg * M_PI / 180.0;
+        //double CL_daoa = -2 * CLa_t * Vh * dw;
+        //double Cm_daoa = -2 * CLa_t * Vh * (lt/c) * dw;
 
-//    double CL0 = KiteProps.Aerodynamics.Cl0;                // Identify also in Lateral identification?
-//    //double CL0_t = KiteProps.Aerodynamics.CL0_tail;
-//    double CLa_tot = KiteProps.Aerodynamics.CLa_total;      // Identify also in Lateral identification?
-//    //double CLa_w = KiteProps.Aerodynamics.CLa_wing;
-//    //double CLa_t = KiteProps.Aerodynamics.CLa_tail;
-//    double e_o = KiteProps.Aerodynamics.e_oswald;
-//
-//    //double dw = CLa_tot / (pi * e_o * AR);             /** downwash acting at the tail [] **/
-//
-//    double CD0_tot = KiteProps.Aerodynamics.CD0_total;      // Identify also in Lateral identification?
-//    //double CD0_w = KiteProps.Aerodynamics.CD0_wing;
-//    //double CD0_t = KiteProps.Aerodynamics.CD0_tail;
-//    SX CYb = SX::sym("CYb");            //double CYb = KiteProps.Aerodynamics.CYb;
-//    //double CYb_vt = KiteProps.Aerodynamics.CYb_vtail;
-//    double Cm0 = KiteProps.Aerodynamics.Cm0;
-//    double Cma = KiteProps.Aerodynamics.Cma;
-//    //SX Cn0 = SX::sym("Cn0");
-//    double Cn0 = KiteProps.Aerodynamics.Cn0;
-//    SX Cnb = SX::sym("Cnb");
-//    //SX Cl0 = SX::sym("Cl0");
-//    double Cl0 = KiteProps.Aerodynamics.Cl0;
-//    SX Clb = SX::sym("Clb");
-//
-//    double CLq = KiteProps.Aerodynamics.CLq;
-//    double Cmq = KiteProps.Aerodynamics.Cmq;
-//    SX CYr = SX::sym("CYr");
-//    SX Cnr = SX::sym("Cnr");
-//    SX Clr = SX::sym("Clr");
-//    SX CYp = SX::sym("CYp");
-//    SX Clp = SX::sym("Clp");
-//    SX Cnp = SX::sym("Cnp");
-//
-//    /** ------------------------------ **/
-//    /** Aerodynamic effects of control **/
-//    /** ------------------------------ **/
-//    double CLde = KiteProps.Aerodynamics.CLde;
-//    SX CYdr = SX::sym("CYdr");
-//    double Cmde = KiteProps.Aerodynamics.Cmde;
-//    SX Cndr = SX::sym("Cndr");
-//    SX Cldr = SX::sym("Cldr");
-//    //SX CDde = SX::sym("CDde");
-//    SX Clda = SX::sym("Clda");
-//    SX Cnda = SX::sym("Cnda");
-//
-//    //double CL_daoa = -2 * CLa_t * Vh * dw;
-//    //double Cm_daoa = -2 * CLa_t * Vh * (lt/c) * dw;
-//    params = SX::vertcat({params,
-//                          CYb, Cnb, Clb,
-//                          CYr, Cnr, Clr, CYp, Clp, Cnp,
-//                          CYdr, Cndr, Cldr, Clda, Cnda
-//                         }); // 14 lateral parameters
-    /** END OF LATERAL IDENTIFICATION PARAMETERS -------------------------------------------------------------------- */
+        params = SX::vertcat({imuPitchOffset,
+                              CL0, CLa_tot,
+                              CD0_tot, Cm0, Cma,
+                              CLq, Cmq,
+                              CLde, Cmde
+                             }); // 10 longitudinal parameters
+
+        getModel<double, SX, double>(g, rho, windFrom_deg, windSpeed,
+                                     b, c, AR, S,
+                                     Mass, Ixx, Iyy, Izz, Ixz,
+                                     imuPitchOffset, CL0, CLa_tot, e_o,
+                                     CD0_tot, CYb, Cm0, Cma, Cn0, Cnb, Cl0, Clb,
+                                     CLq, Cmq, CYr, Cnr, Clr, CYp, Clp, Cnp,
+                                     CLde, CYdr, Cmde, Cndr, Cldr, Clda, Cnda,
+
+                                     v, w, r, q,
+                                     T, dE, dR, dA,
+                                     v_dot, w_dot, r_dot, q_dot,
+                                     Faero_b, T_b);
+
+    } else if (identMode == LATERAL) {
+        /** LATERAL IDENTIFICATION PARAMETERS ----------------------------------------------------------------------- */
+
+        double imuPitchOffset = KiteProps.Geometry.ImuPitchOffset_deg * M_PI / 180.0;
+
+        double CL0 = KiteProps.Aerodynamics.Cl0;                // Identify also in Lateral identification?
+        //double CL0_t = KiteProps.Aerodynamics.CL0_tail;
+        double CLa_tot = KiteProps.Aerodynamics.CLa_total;      // Identify also in Lateral identification?
+        //double CLa_w = KiteProps.Aerodynamics.CLa_wing;
+        //double CLa_t = KiteProps.Aerodynamics.CLa_tail;
+        double e_o = KiteProps.Aerodynamics.e_oswald;
+
+        //double dw = CLa_tot / (pi * e_o * AR);             /** downwash acting at the tail [] **/
+
+        double CD0_tot = KiteProps.Aerodynamics.CD0_total;      // Identify also in Lateral identification?
+        //double CD0_w = KiteProps.Aerodynamics.CD0_wing;
+        //double CD0_t = KiteProps.Aerodynamics.CD0_tail;
+        SX CYb = SX::sym("CYb");            //double CYb = KiteProps.Aerodynamics.CYb;
+        //double CYb_vt = KiteProps.Aerodynamics.CYb_vtail;
+        double Cm0 = KiteProps.Aerodynamics.Cm0;
+        double Cma = KiteProps.Aerodynamics.Cma;
+        //SX Cn0 = SX::sym("Cn0");
+        double Cn0 = KiteProps.Aerodynamics.Cn0;
+        SX Cnb = SX::sym("Cnb");
+        //SX Cl0 = SX::sym("Cl0");
+        double Cl0 = KiteProps.Aerodynamics.Cl0;
+        SX Clb = SX::sym("Clb");
+
+        double CLq = KiteProps.Aerodynamics.CLq;
+        double Cmq = KiteProps.Aerodynamics.Cmq;
+        SX CYr = SX::sym("CYr");
+        SX Cnr = SX::sym("Cnr");
+        SX Clr = SX::sym("Clr");
+        SX CYp = SX::sym("CYp");
+        SX Clp = SX::sym("Clp");
+        SX Cnp = SX::sym("Cnp");
+
+        /** ------------------------------ **/
+        /** Aerodynamic effects of control **/
+        /** ------------------------------ **/
+        double CLde = KiteProps.Aerodynamics.CLde;
+        SX CYdr = SX::sym("CYdr");
+        double Cmde = KiteProps.Aerodynamics.Cmde;
+        SX Cndr = SX::sym("Cndr");
+        SX Cldr = SX::sym("Cldr");
+        //SX CDde = SX::sym("CDde");
+        SX Clda = SX::sym("Clda");
+        SX Cnda = SX::sym("Cnda");
+
+        //double CL_daoa = -2 * CLa_t * Vh * dw;
+        //double Cm_daoa = -2 * CLa_t * Vh * (lt/c) * dw;
+        params = SX::vertcat({params,
+                              CYb, Cnb, Clb,
+                              CYr, Cnr, Clr, CYp, Clp, Cnp,
+                              CYdr, Cndr, Cldr, Clda, Cnda
+                             }); // 14 lateral parameters
+
+        getModel<double, double, SX>(g, rho, windFrom_deg, windSpeed,
+                                     b, c, AR, S,
+                                     Mass, Ixx, Iyy, Izz, Ixz,
+                                     imuPitchOffset, CL0, CLa_tot, e_o,
+                                     CD0_tot, CYb, Cm0, Cma, Cn0, Cnb, Cl0, Clb,
+                                     CLq, Cmq, CYr, Cnr, Clr, CYp, Clp, Cnp,
+                                     CLde, CYdr, Cmde, Cndr, Cldr, Clda, Cnda,
+
+                                     v, w, r, q,
+                                     T, dE, dR, dA,
+                                     v_dot, w_dot, r_dot, q_dot,
+                                     Faero_b, T_b);
+
+    }
 
 //    /** ------------------------------ **/
 //    /**        Tether parameters       **/
@@ -614,178 +683,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
 //    params = SX::vertcat({params,
 //                                 //                               Ks, Kd, Lt, rx, rz,
 //                         }); // 5 Tether parameters
-
-    /** ============================================================================================================ **/
-    /** Start of model **/
-
-    /** -------------------------- **/
-    /** State variables definition **/
-    /** -------------------------- **/
-    SX v = SX::sym("v", 3); /**  linear velocity of the CoG in the Body Reference Frame (BRF) [m/s] **/
-    SX w = SX::sym("w", 3); /**  glider angular velocity in BRF [rad/s]                             **/
-    SX r = SX::sym("r", 3); /**  position of the CoG in the Inertial Reference Frame (IRF) [m]      **/
-    SX q = SX::sym("q", 4); /**  body attitude relative to IRF [unit quaternion]                    **/
-
-    /** ---------------------------- **/
-    /** Control variables definition **/
-    /** ---------------------------- **/
-    /** @todo: consider more detailed propeller model **/
-    SX T = SX::sym("T");   /** propeller propulsion : applies along X-axis in BRF [N] **/
-    SX dE = SX::sym("dE"); /** elevator deflection [positive causing negative pitch movement (nose down)] [rad] **/
-    SX dR = SX::sym("dR"); /** rudder deflection [positive causing negative yaw movement (nose left)] [rad] **/
-    SX dA = SX::sym("dA"); /** aileron deflection [positive causing negative roll movement (right wing up)] [rad] **/
-    //SX dF = SX::sym("dF"); /** flaps deflection [reserved, but not used]               **/
-
-    SX WS = SX::sym("WS", 3);                 /** Wind speed (velocity) **/
-    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
-    WS = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
-
-    SX q_imu = SX::vertcat({cos(-imuPitchOffset / 2.0),
-                            0.0,
-                            sin(-imuPitchOffset / 2.0),
-                            0.0}); /** IMU to body **/
-    SX q_corrected = kmath::quat_multiply(q,
-                                          q_imu); /** Rotation from NED to body frame, corrected by IMU pitch offset **/
-
-    SX qWS = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, WS}));
-    SX qWS_q = kmath::quat_multiply(qWS, q_corrected);
-    SX WS_b = qWS_q(Slice(1, 4), 0);            /** Wind velocity in body frame **/
-
-    SX Va = v - WS_b;         /** Apparent velocity in body frame **/
-    SX V = SX::norm_2(Va);     /** Apparent speed **/
-    SX V2 = SX::dot(Va, Va);   /** Apparent speed squarred**/
-
-    SX ss = asin(Va(1) / (V + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
-    SX aoa = atan2(Va(2), (Va(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
-    SX dyn_press = 0.5 * rho * V2;         /** dynamic pressure **/
-
-    SX CD = CD0_tot + pow(CL0 + CLa_tot * aoa, 2) / (pi * e_o * AR); /** total drag coefficient **/
-
-    /** ------------------------- **/
-    /** Dynamic Equations: Forces */
-    /** ------------------------- **/
-    SX LIFT = (CL0 + CLa_tot * aoa) * dyn_press * S +
-              (0.25 * CLq * c * S * rho) * V * w(1);
-    SX DRAG = CD * dyn_press * S;
-    SX SF = (CYb * ss + CYdr * dR) * dyn_press * S +
-            0.25 * (CYr * w(2) + CYp * w(0)) * (b * rho * S) * V;
-
-    /** Compute transformation between WRF and BRF: qw_b **/
-    /** qw_b = q(aoa) * q(-ss);                           **/
-    SX q_aoa = SX::vertcat({cos(aoa / 2), 0, sin(aoa / 2), 0});
-    SX q_ss = SX::vertcat({cos(-ss / 2), 0, 0, sin(-ss / 2)});
-
-    SX qw_b = kmath::quat_multiply(q_aoa, q_ss);
-    SX qw_b_inv = kmath::quat_inverse(qw_b);
-
-    /** Aerodynamic forces in BRF: Faer0_b = qw_b * [0; -DRAG; SF; -LIFT] * qw_b_inv */
-    SX qF_tmp = kmath::quat_multiply(qw_b_inv, SX::vertcat({0, -DRAG, 0, -LIFT}));
-    SX qF_q = kmath::quat_multiply(qF_tmp, qw_b);
-    SX Faero_b = qF_q(Slice(1, 4), 0);
-
-    SX Zde = (-CLde) * dE * dyn_press * S;
-    SX FdE_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa),
-                                      SX::vertcat({0, 0, 0, Zde}));
-    SX qFdE = kmath::quat_multiply(FdE_tmp, q_aoa);
-    SX FdE = qFdE(Slice(1, 4), 0);
-
-    Faero_b = Faero_b + FdE + SX::vertcat({0, SF, 0});
-
-    /** Gravitational acceleration in BRF */
-    SX qG = kmath::quat_multiply(kmath::quat_inverse(q),
-                                 SX::vertcat({0, 0, 0, g}));
-    SX qG_q = kmath::quat_multiply(qG, q_corrected);
-    SX g_b = qG_q(Slice(1, 4), 0);
-
-    /** Propulsion force in BRF */
-    // const double p1 = -0.007752958684034;
-    // const double p2 = -0.137115918638887;
-    // const double p3 = 9.327531598002182;
-    // normalize to get 0...1
-    const double p1 = -0.00083119;
-    const double p2 = -0.014700129;
-    SX T_b = SX::vertcat({T * (p1 * V2 + p2 * V + 1.0), 0, 0});
-    //SX T_b = SX::vertcat({T, 0, 0});
-
-    /** Tether force */
-//    /** value: using smooth ramp approximation */
-//    SX d_ = SX::norm_2(r);
-//    /** spring term */
-//    /** @todo: put all coefficients in the config */
-//    //const double Ks = 15 * Mass;
-//    //const double Kd = 10 * Mass;
-//    SX Rv = ((d_ - Lt));
-//    SX Rs = -Rv * (r / d_);
-//    /** damping term */
-//    SX qvi = kmath::quat_multiply(q, SX::vertcat({0, v}));
-//    SX qvi_q = kmath::quat_multiply(qvi, kmath::quat_inverse(q));
-//    SX vi = qvi_q(Slice(1, 4), 0);
-//    SX Rd = (-r / d_) * SX::dot(r, vi) / d_;
-//    SX R = (Ks * Rs + Kd * Rd) * kmath::heaviside(d_ - Lt, 1);
-//
-//    /** BRF */
-//    SX qR = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, R}));
-//    SX qR_q = kmath::quat_multiply(qR, q_corrected);
-//    SX R_b = qR_q(Slice(1, 4), 0);
-
-    /** Total external forces devided by glider's mass (linear acceleration) */
-    auto v_dot = (Faero_b + T_b) / Mass + g_b - SX::cross(w, v);
-//    auto v_dot = (Faero_b + T_b + R_b) / Mass + g_b - SX::cross(w, v);
-
-    /** ------------------------- */
-    /** Dynamic Equation: Moments */
-    /** ------------------------- */
-    /** Rolling Aerodynamic Moment */
-    SX L = (Cl0 + Clb * ss + Cldr * dR + Clda * dA) * dyn_press * S * b +
-           (Clr * w(2) + Clp * w(0)) * (0.25 * rho * std::pow(b, 2) * S) * V;
-
-    /** Pitching Aerodynamic Moment */
-    SX M = (Cm0 + Cma * aoa + Cmde * dE) * dyn_press * S * c +
-           Cmq * (0.25 * S * std::pow(c, 2) * rho) * w(1) * V;
-
-    /** Yawing Aerodynamic Moment */
-    SX N = (Cn0 + Cnb * ss + Cndr * dR + Cnda * dA) * dyn_press * S * b +
-           (Cnp * w(0) + Cnr * w(2)) * (0.25 * S * std::pow(b, 2) * rho) * V;
-
-    /** Aircraft Inertia Matrix */
-    SXVector j_vec{Ixx, Iyy, Izz};
-    auto J = SX::diag(SX::vertcat(j_vec));
-    J(0, 2) = Ixz;
-    J(2, 0) = Ixz;
-
-    /** Angular motion equationin BRF */
-    /** Moments transformation SRF -> BRF */
-    SX T_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa),
-                                    SX::vertcat({0, L, M, N}));
-    SX Trot = kmath::quat_multiply(T_tmp, q_aoa);
-    auto Maero = Trot(Slice(1, 4), 0);
-
-    /** Moment introduced by tether */
-//    //DM tether_arm = DM({rx, ry, rz});
-//    SX tether_arm = SX::vertcat({rx, ry, rz});
-//    SX Mt = SX::cross(tether_arm, R_b);
-//
-//    auto w_dot = SX::mtimes(SX::inv(J), (Maero + Mt - SX::cross(w, SX::mtimes(J, w))));
-    auto w_dot = SX::mtimes(SX::inv(J), (Maero - SX::cross(w, SX::mtimes(J, w))));
-
-    /** ----------------------------- */
-    /** Kinematic Equations: Position */
-    /** ----------------------------- */
-    /** Aircraft position in the IRF  */
-    SX qv = kmath::quat_multiply(q, SX::vertcat({0, v}));
-    SX qv_q = kmath::quat_multiply(qv, kmath::quat_inverse(q));
-    auto r_dot = qv_q(Slice(1, 4), 0);
-
-    /** ----------------------------- */
-    /** Kinematic Equations: Attitude */
-    /** ----------------------------- */
-    /** Aircraft attitude wrt IRF  */
-    double lambda = -5;
-    auto q_dot = 0.5 * kmath::quat_multiply(q, SX::vertcat({0, w})) +
-                 0.5 * lambda * q_corrected * (SX::dot(q_corrected, q_corrected) - 1);
-
-    /** End of dynamics model **/
-    /** ============================================================================================================ **/
 
     /** Complete dynamics of the Kite */
     auto state = SX::vertcat({v, w, r, q});
@@ -842,6 +739,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
         this->NumIntegrator = RK4_INT;
         */
 }
+
+
 
 /** --------------------- */
 /** Rigid Body Kinematics */

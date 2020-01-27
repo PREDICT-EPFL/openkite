@@ -31,6 +31,7 @@ void set_absolute_parameter_bounds(DM &LBP, DM &UBP, const int &index,
 
 }
 
+
 struct OptProblemProperties {
 
     const int dimx;
@@ -55,10 +56,6 @@ struct FlightMetaData {
     int number{0};
     int seq{0};
 
-    /// 1. Identification maneuver ///
-    //std::string maneuver = "identRoll";
-    std::string maneuver = "identPitch";
-
     std::string resampleMethod = "cheb";
 };
 
@@ -81,7 +78,10 @@ struct Parameter {
     }
 };
 
-std::vector<FlightMetaData> readIn_identSchedule(const std::string &filepath) {
+std::vector<FlightMetaData> readIn_identSchedule(const std::string &filedir, const std::string &identManeuver) {
+
+
+    std::string filepath = filedir + identManeuver + "_identSchedule.txt";
 
     std::vector<FlightMetaData> flights;
 
@@ -112,14 +112,14 @@ std::vector<FlightMetaData> readIn_identSchedule(const std::string &filepath) {
     return flights;
 }
 
-void get_seqDir(const std::string &flightDataDir, const FlightMetaData &flight,
+void get_seqDir(const std::string &flightDataDir, const std::string &identManeuver, const FlightMetaData &flight,
 
                 std::string &seq_dir) {
 
     seq_dir = flightDataDir
               + "session_" + std::to_string(flight.session)
               + "/flight_" + std::to_string(flight.number);
-    if (!flight.maneuver.empty()) seq_dir.append("/" + flight.maneuver);
+    if (!identManeuver.empty()) seq_dir.append("/" + identManeuver);
     seq_dir.append("/seq_" + std::to_string(flight.seq) + "/");
 }
 
@@ -240,21 +240,21 @@ void readIn_sequenceData(const std::string &seq_dir, const FlightMetaData &fligh
 
     /* States */
     DM id_states_wTime;
-    readIn_identificationData(seq_dir + flight.resampleMethod + "_states.txt", dimx, DATA_POINTS,
+    readIn_identificationData(seq_dir + flight.resampleMethod + "_states.txt", 1 + dimx, DATA_POINTS,
 
                               id_states_wTime);
 
     id_time = id_states_wTime(0, Slice(0, DATA_POINTS));
-    id_states_woTime = id_states_wTime(Slice(1, dimx), Slice(0, DATA_POINTS));
+    id_states_woTime = id_states_wTime(Slice(1, 1 + dimx), Slice(0, DATA_POINTS));
 
     /* Controls */
     DM id_controls_wTime;
-    readIn_identificationData(seq_dir + flight.resampleMethod + "_controls.txt", dimu, DATA_POINTS,
+    readIn_identificationData(seq_dir + flight.resampleMethod + "_controls.txt", 1 + dimu, DATA_POINTS,
 
                               id_controls_wTime);
 
     DM id_controls_rev = flipDM(id_controls_wTime, 2);
-    id_controls_rev_woTime = id_controls_rev(Slice(1, dimu), Slice(0, DATA_POINTS));
+    id_controls_rev_woTime = id_controls_rev(Slice(1, 1 + dimu), Slice(0, DATA_POINTS));
 
     /* Sequence info */
     readIn_sequenceInfo(seq_dir + "seqInfo.txt",
@@ -269,11 +269,11 @@ void readIn_sequenceData(const std::string &seq_dir, const FlightMetaData &fligh
 
 
 /* Set up */
-void get_costMatrix(const std::string &identManeuver,
+void get_costMatrix(const KiteDynamics::IdentMode identMode,
 
                     DM &Q) {
 
-    if (identManeuver == "identPitch") {
+    if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
 
         Q = SX::diag(SX({1e2, 0, 1e2,
                          0, 1e2, 0,
@@ -281,17 +281,18 @@ void get_costMatrix(const std::string &identManeuver,
                          1e2, 0, 1e2, 0}));
     }
 
-    if (identManeuver == "identRoll") {
+    if (identMode == KiteDynamics::IdentMode::LATERAL) {
 
         Q = SX::diag(SX({0, 1e2, 0,
                          1e2, 0, 1e2,
-                         1e2, 1e2, 1e1,
-                         1e2, 1e2, 0, 1e2}));
+                         1e2, 1e2, 0,
+                         1e2, 1e2, 1e1, 1e2}));
     }
 
 }
 
 void get_kiteDynamics(const std::string &filepath, const double windFrom_deg, const double windSpeed,
+                      const KiteDynamics::IdentMode &identMode,
 
                       KiteDynamics &kite, KiteDynamics &kite_int) {
 
@@ -304,7 +305,7 @@ void get_kiteDynamics(const std::string &filepath, const double windFrom_deg, co
     algo_props.sampling_time = 0.02;
     //algo_props.sampling_time = static_cast<double>(id_data(0, 1) - id_data(0, 0));
 
-    kite = KiteDynamics(kite_props, algo_props, true);
+    kite = KiteDynamics(kite_props, algo_props, identMode);
     kite_int = KiteDynamics(kite_props, algo_props); //integration model
 }
 
@@ -790,32 +791,48 @@ int main() {
 
     std::string flightDataDir = "/home/johannes/identification/processed_flight_data/";
 
-    /// Identification mode ///
-    /** COMMENT / UNCOMMENT THE SUITING PARAMETERS IN KITE.CPP ! **/
-
-    /// 3. lon: 10, lat: 14 identification parameters ///
-    const int dimp = 10;
-
-    /// Identification data ///
+    /// State and Control dimensions ///
     const int dimx = 13;  // v(3) w(3) r(3) q(4)
     const int dimu = 4;   // T elev rud ail
 
-    /* Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! */
-    const int DATA_POINTS = 346;
+    /// 1. Identification mode ///
+    KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LATERAL;
+
+    /// 2. lon: 10, lat: 14 identification parameters ///
+    const int dimp = 14;
+
+    /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
+    // pitch / longitudinal
+//    const int DATA_POINTS = 346;
+//    const int poly_order = 3;
+//    const int num_segments = 115;
+
+    // roll / lateral
+    const int DATA_POINTS = 325;;
     const int poly_order = 3;
-    const int num_segments = 115;
+    const int num_segments = 108;
 
     //OptProblemProperties opp(13, 4, 10, 346, 3, 115);
-    OptProblemProperties opp(dimx, dimu, dimp, DATA_POINTS, poly_order, num_segments);
-
-    /** Load identification schedule **/
-    std::vector<FlightMetaData> flights = readIn_identSchedule(flightDataDir + "identPitch_identSchedule.txt");
+    //OptProblemProperties opp(dimx, dimu, dimp, DATA_POINTS, poly_order, num_segments);
 
     /// ============================================================================================================ ///
 
+    std::string identManeuver;
+    if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
+        identManeuver = "identPitch";
+    } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
+        identManeuver = "identRoll";
+    }
+
+    std::cout << "Running " << identManeuver << " identification of " << dimp << " parameters with "
+              << DATA_POINTS << " data points.\n";
+
+    /** Load identification schedule **/
+    std::vector<FlightMetaData> flights = readIn_identSchedule(flightDataDir, identManeuver);
+
     /* Cost matrix */
     DM Q;
-    get_costMatrix(flights[0].maneuver,
+    get_costMatrix(identMode,
 
                    Q);
 
@@ -855,7 +872,7 @@ int main() {
 
         /* Construct sequence directory path */
         std::string seq_dir;
-        get_seqDir(flightDataDir, flight,
+        get_seqDir(flightDataDir, identManeuver, flight,
 
                    seq_dir);
         std::cout << "Directory: " << seq_dir << "\n";
@@ -876,7 +893,7 @@ int main() {
         int nIt{0};
         bool kite_params_warmStart{false};
 
-        readIn_sequenceData(seq_dir, flight, 1 + dimx, 1 + dimu, DATA_POINTS,
+        readIn_sequenceData(seq_dir, flight, dimx, dimu, DATA_POINTS,
 
                             id_time, id_states_woTime, id_controls_rev_woTime,
                             windFrom_deg, windSpeed, tf,
@@ -885,6 +902,8 @@ int main() {
         //std::cout << "tf = " << tf << "\n";
 
 
+        /** Initial state: First column of id_states **/
+        DM id_state0 = id_states_woTime(Slice(0, dimx), 0);
 
         /** Control bounds **/
         /* (for all DATA_POINTs)
@@ -916,7 +935,7 @@ int main() {
         std::string kite_params_in_filepath = kite_baseParams_dir + kite_baseParams_filename + ".yaml";
 
         KiteDynamics kite, kite_int;
-        get_kiteDynamics(kite_params_in_filepath, windFrom_deg, windSpeed,
+        get_kiteDynamics(kite_params_in_filepath, windFrom_deg, windSpeed, identMode,
 
                          kite, kite_int);
 
@@ -939,11 +958,15 @@ int main() {
 
         std::cout << "OK: Solver set up\n";
 
+
         /** Ident iteration loop =================================================================================== **/
         /* Print current sequence id (session/flight/seq */
         std::cout << "Running " << nIt << " iteration(s) on base parameters: " << kite_baseParams_filename << "\n";
 
         std::string kite_params_out_filepath;
+        DM temp_x;
+        DM temp_lam_g;
+        DM temp_lam_x;
 
         for (int iIt = 0; iIt < nIt; ++iIt) {
 
@@ -975,7 +998,7 @@ int main() {
 
             std::list<Parameter> parameterList; // List to map parameter id and name to sort them by sensitivity later
 
-            setup_optimizationParameters(kite_props_in, flight.maneuver,
+            setup_optimizationParameters(kite_props_in, identManeuver,
 
                                          REF_P, LBP, UBP, parameterList);
             std::cout << "OK: Parameter preparation\n";
@@ -995,22 +1018,28 @@ int main() {
             SX ubg = SX::zeros(diff_constr.size());
 
 
-            DMDict solution;
+            /* Feasible optimization variable guess  */
             DM feasible_state;
 
-            /* Initial state: First column of id_states */
-            DM init_state = id_states_woTime(Slice(0, dimx), 0);
+            DMDict feasible_guess;
 
-            /** if the solutions available load them from file */
-            if (kite_utils::file_exists(seq_dir + "id_x0.txt")) {
-                DM sol_x = kite_utils::read_from_file(seq_dir + "id_x0.txt");
+            if (!temp_x.is_empty()) {
+                /* Use found trajectory from last iteration as initial feasible guess for this iteration */
 
-                feasible_state = sol_x;
-                ARG["x0"] = DM::vertcat(DMVector{sol_x, REF_P});
+                std::cout << "Using initial guess from last iteration.\n";
 
-                std::cout << "Initial guess loaded from a file \n";
+                ARG["x0"] = temp_x;
+                ARG["lam_x0"] = temp_lam_x;
+                ARG["lam_g0"] = temp_lam_g;
+//                std::cout << "temp_x " << temp_x.size() << temp_x << "\n";
+//                std::cout << "temp_lam_x " << temp_lam_x.size()  << temp_lam_x << "\n";
+//                std::cout << "temp_lam_g " << temp_lam_g.size() << temp_lam_g << "\n";
+
             } else {
-                /** otherwise, provide initial guess from integrator */
+                /* Provide initial guess from integrator by flying at constant control input */
+
+                std::cout << "Computing initial guess from integrator.\n";
+
                 casadi::DMDict props;
                 props["scale"] = 0;
                 props["P"] = casadi::DM::diag(casadi::DM(
@@ -1023,49 +1052,34 @@ int main() {
                 DM init_control = DM({0.1, 0.0, 0.0, 0.0});
                 init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
 
-                std::cout << "init_state: " << init_state << " init_control: " << init_control << "\n";
+                std::cout << "init_state: " << id_state0 << " init_control: " << init_control << "\n";
 
-                solution = ps_solver.solve_trajectory(init_state, init_control, true);
+                feasible_guess = ps_solver.solve_trajectory(id_state0, init_control, true);
 
-                feasible_state = solution.at("x");
-                ARG["x0"] = casadi::DM::vertcat(casadi::DMVector{feasible_state, REF_P});
+                DM feasible_traj = feasible_guess.at("x");
+//                std::cout << "feasible traj: " << feasible_traj.size() << feasible_traj << "\n";
+//                std::cout << "feasible lam_x0: " << feasible_guess.at("lam_x").size() << feasible_guess.at("lam_x") << "\n";
+//                std::cout << "feasible lam_g0: " << feasible_guess.at("lam_g").size() << feasible_guess.at("lam_g") << "\n";
+
+                ARG["x0"] = casadi::DM::vertcat({feasible_traj, REF_P});
+                ARG["lam_x0"] = DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())});
+                ARG["lam_g0"] = feasible_guess.at("lam_g");
+//                std::cout << "x0: " <<  casadi::DM::vertcat({feasible_traj, REF_P}).size() <<  casadi::DM::vertcat({feasible_traj, REF_P}) << "\n";
+//                std::cout << "lam_g0: " <<  DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())}).size() <<  DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())}) << "\n";
+//                std::cout << "lam_x0: " << feasible_guess.at("lam_g").size() << feasible_guess.at("lam_g") << "\n";
             }
-
-            if (kite_utils::file_exists(seq_dir + "id_lam_g.txt")) {
-                ARG["lam_g0"] = kite_utils::read_from_file(seq_dir + "id_lam_g.txt");
-            } else {
-                ARG["lam_g0"] = solution.at("lam_g");
-            }
-
-            if (kite_utils::file_exists(seq_dir + "id_lam_x.txt")) {
-                DM sol_lam_x = kite_utils::read_from_file(seq_dir + "id_lam_x.txt");
-                ARG["lam_x0"] = DM::vertcat({sol_lam_x, DM::zeros(REF_P.size1())});
-            } else {
-                ARG["lam_x0"] = DM::vertcat({solution.at("lam_x"), DM::zeros(REF_P.size1())});
-            }
-
-//    /** write initial trajectory to a file */
-//    std::ofstream trajectory_file(seq_dir + "integrated_trajectory.txt", std::ios::out);
-//    if (!trajectory_file.fail()) {
-//        for (int i = 0; i < varx.size1(); i = i + 13) {
-//            std::vector<double> tmp = feasible_state(Slice(i, i + 13), 0).nonzeros();
-//            for (uint j = 0; j < tmp.size(); j++) {
-//                trajectory_file << tmp[j] << " ";
-//            }
-//            trajectory_file << "\n";
-//        }
-//    }
-//    trajectory_file.close();
 
             /* Set initial state
              * As the problem is formulated time-reverse, the position of the initial state
              * in the optimization variable vector is at the end of the states. */
             int idx_in = num_segments * poly_order * dimx;
             int idx_out = idx_in + dimx;
-            lbx(Slice(idx_in, idx_out), 0) = init_state;
-            ubx(Slice(idx_in, idx_out), 0) = init_state;
+            lbx(Slice(idx_in, idx_out), 0) = id_state0;
+            ubx(Slice(idx_in, idx_out), 0) = id_state0;
 
             /** Solve the optimization problem ===================================================================== **/
+            std::cout << "\nSolving the optimization problem:\n";
+
             ARG["lbx"] = lbx;
             ARG["ubx"] = ubx;
             ARG["lbg"] = lbg;
@@ -1076,6 +1090,10 @@ int main() {
             DM result = res.at("x");
             DM lam_x = res.at("lam_x");
 
+            temp_x = res.at("x");
+            temp_lam_x = res.at("lam_x");
+            temp_lam_g = res.at("lam_g");
+
             /** Output ============================================================================================= **/
             /** Write new parameters to file **/
             /* Extract optimized parameters from optimization result */
@@ -1083,7 +1101,7 @@ int main() {
             std::vector<double> new_params_vec = new_params.nonzeros();
 
             write_parameterFile(kite_params_in_filepath, kite_params_out_filepath,
-                                flight.maneuver, new_params_vec);
+                                identManeuver, new_params_vec);
 
             /** Write estimated trajectory to file **/
             std::string est_traj_filepath = kite_params_out_dir + afterItStr + "_estimatedTrajectory.txt";
