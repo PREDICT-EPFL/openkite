@@ -283,10 +283,10 @@ void get_costMatrix(const KiteDynamics::IdentMode identMode,
 
     if (identMode == KiteDynamics::IdentMode::LATERAL) {
 
-        Q = SX::diag(SX({0, 1e2, 0,
-                         1e2, 0, 1e2,
-                         1e2, 1e2, 0,
-                         1e2, 1e2, 1e1, 1e2}));
+        Q = SX::diag(SX({1e1, 1e2, 1e1,
+                         1e2, 1e1, 1e2,
+                         1e2, 1e2, 1e2,
+                         1e2, 1e2, 1e2, 1e2}));
     }
 
 }
@@ -344,7 +344,7 @@ void setup_optimizationParameters(const KiteProperties &kite_props, const std::s
     /** --------------------- **/
     /** Geometric parameters  **/
     /** --------------------- **/
-    double imuPitchOffset = kite_props.Geometry.ImuPitchOffset_deg * M_PI / 180.0;
+    double imuPitchOffset_deg = kite_props.Geometry.ImuPitchOffset_deg;
 
     //double b = kite_props.Geometry.WingSpan;
     //double c = kite_props.Geometry.MAC;
@@ -440,7 +440,7 @@ void setup_optimizationParameters(const KiteProperties &kite_props, const std::s
         int b = REF_P.size1(); // parameter size before
 
         REF_P = DM::vertcat({REF_P,
-                             imuPitchOffset,
+                             imuPitchOffset_deg,
                              CL0, CLa_tot,
                              CD0_tot, Cm0, Cma,
                              CLq, Cmq,
@@ -451,28 +451,27 @@ void setup_optimizationParameters(const KiteProperties &kite_props, const std::s
         LBP = REF_P;
         UBP = REF_P;
 
-        set_absolute_parameter_bounds(LBP, UBP, b + 0, -10.0 * M_PI / 180.0,
-                                      10.0 * M_PI / 180.0); // imuPitchOffset
+        set_absolute_parameter_bounds(LBP, UBP, b + 0, -0.1, 0.1); // imuPitchOffset_deg
         parameterList.emplace_back(0, "PitchOffs");
 
-        set_relative_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.1, 0.1); // CL0
+        set_relative_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.1, 0.5); // CL0
         set_relative_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.05, 0.1); // CLa_tot
         parameterList.emplace_back(1, "CL0");
         parameterList.emplace_back(2, "CLa_tot");
 
-        set_relative_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.1, 0.25); // CD0_tot
+        set_relative_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.5, 0.7); // CD0_tot
         set_relative_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5); // Cm0
         set_relative_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.1, 0.3); // Cma
         parameterList.emplace_back(3, "CD0_tot");
         parameterList.emplace_back(4, "Cm0");
         parameterList.emplace_back(5, "Cma");
 
-        set_relative_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.2, 0.2); // CLq
+        set_relative_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.5, 0.5); // CLq
         set_relative_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.3, 0.3); // Cmq
         parameterList.emplace_back(6, "CLq");
         parameterList.emplace_back(7, "Cmq");
 
-        set_relative_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5); // CLde
+        set_relative_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.7); // CLde
         set_relative_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5); // Cmde
         parameterList.emplace_back(8, "CLde");
         parameterList.emplace_back(9, "Cmde");
@@ -559,7 +558,7 @@ void write_parameterFile(const std::string &kite_params_in_filepath, const std::
 
     /** LONGITUDINAL IDENTIFICATION PARAMETERS ---------------------------------------------------------------------- */
     if (identManeuver == "identPitch") {
-        kite_params_yaml["geometry"]["imu_pitch_offs_deg"] = new_params_vec[0] * 180.0 / M_PI;
+        kite_params_yaml["geometry"]["imu_pitch_offs_deg"] = new_params_vec[0];
 
         kite_params_yaml["aerodynamic"]["CL0"] = new_params_vec[1];
         kite_params_yaml["aerodynamic"]["CLa_total"] = new_params_vec[2];
@@ -837,12 +836,12 @@ int main() {
                    Q);
 
     /* State bounds (constant over all sequences and iterations) */
-    DM UBX = DM::vertcat({50, 50, 50,
+    DM UBX = DM::vertcat({40, 15, 15,
                           4 * M_PI, 4 * M_PI, 4 * M_PI,
-                          300, 300, 300,
+                          300, 300, 0,
                           1.05, 1.05, 1.05, 1.05});
 
-    DM LBX = DM::vertcat({2.0, -50, -50,
+    DM LBX = DM::vertcat({2.0, -15, -15,
                           -4 * M_PI, -4 * M_PI, -4 * M_PI,
                           -300, -300, -300,
                           -1.05, -1.05, -1.05, -1.05});     // for infinity use -DM::inf(1) and DM::inf(1)
@@ -1095,9 +1094,16 @@ int main() {
             if (solve_status == "Invalid_Number_Detected") {
                 //std::cout << "X0 : " << ARG["x0"] << "\n";
                 std::cout << "Invalid number detected!\n";
+                iIt = nIt;
+                continue;
             }
             if (solve_status == "Infeasible_Problem_Detected") {
                 std::cout << "Infeasible problem detected. Stopping iterations on this sequence. \n";
+                iIt = nIt;
+                continue;
+            }
+            if (solve_status == "Restoration_Failed") {
+                std::cout << "Restoration failed! Stopping iterations on this sequence. \n";
                 iIt = nIt;
                 continue;
             }

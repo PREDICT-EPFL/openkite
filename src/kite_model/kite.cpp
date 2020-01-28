@@ -126,10 +126,15 @@ namespace kite_utils {
 
 template<typename P, typename PO, typename PA>
 void
-KiteDynamics::getModel(P &g, P &rho, P &windFrom_deg, P &windSpeed, P &b, P &c, P &AR, P &S, P &Mass, P &Ixx, P &Iyy,
-                       P &Izz, P &Ixz, PO &imuPitchOffset, PO &CL0, PO &CLa_tot, P &e_o, PO &CD0_tot, PA &CYb, PO &Cm0,
-                       PO &Cma, P &Cn0, PA &Cnb, P &Cl0, PA &Clb, PO &CLq, PO &Cmq, PA &CYr, PA &Cnr, PA &Clr, PA &CYp,
-                       PA &Clp, PA &Cnp, PO &CLde, PA &CYdr, PO &Cmde, PA &Cndr, PA &Cldr, PA &Clda, PA &Cnda,
+KiteDynamics::getModel(P &g, P &rho, P &windFrom_deg, P &windSpeed,
+                       P &b, P &c, P &AR, P &S,
+                       P &Mass, P &Ixx, P &Iyy, P &Izz, P &Ixz,
+
+                       PO &imuPitchOffset_deg, PO &CL0, PO &CLa_tot, P &e_o,
+
+                       PO &CD0_tot, PA &CYb, PO &Cm0, PO &Cma, P &Cn0, PA &Cnb, P &Cl0, PA &Clb,
+                       PO &CLq, PO &Cmq, PA &CYr, PA &Cnr, PA &Clr, PA &CYp, PA &Clp, PA &Cnp,
+                       PO &CLde, PA &CYdr, PO &Cmde, PA &Cndr, PA &Cldr, PA &Clda, PA &Cnda,
 
                        casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q, casadi::SX &T, casadi::SX &dE,
                        casadi::SX &dR, casadi::SX &dA, casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot,
@@ -161,9 +166,9 @@ KiteDynamics::getModel(P &g, P &rho, P &windFrom_deg, P &windSpeed, P &b, P &c, 
     SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
     WS = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
 
-    SX q_imu = SX::vertcat({cos(-imuPitchOffset / 2.0),
+    SX q_imu = SX::vertcat({cos(-imuPitchOffset_deg * M_PI / 180.0 / 2.0),
                             0.0,
-                            sin(-imuPitchOffset / 2.0),
+                            sin(-imuPitchOffset_deg * M_PI / 180.0 / 2.0),
                             0.0}); /** IMU to body **/
     SX q_corrected = kmath::quat_multiply(q,
                                           q_imu); /** Rotation from NED to body frame, corrected by IMU pitch offset **/
@@ -326,7 +331,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     /** --------------------- **/
     /** Geometric parameters  **/
     /** --------------------- **/
-    double imuPitchOffset = KiteProps.Geometry.ImuPitchOffset_deg * M_PI / 180.0;
+    double imuPitchOffset_deg = KiteProps.Geometry.ImuPitchOffset_deg;
 
     double b = KiteProps.Geometry.WingSpan;
     double c = KiteProps.Geometry.MAC;
@@ -418,7 +423,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     getModel<double, double, double>(g, rho, windFrom_deg, windSpeed,
                                      b, c, AR, S,
                                      Mass, Ixx, Iyy, Izz, Ixz,
-                                     imuPitchOffset, CL0, CLa_tot, e_o,
+                                     imuPitchOffset_deg, CL0, CLa_tot, e_o,
                                      CD0_tot, CYb, Cm0, Cma, Cn0, Cnb, Cl0, Clb,
                                      CLq, Cmq, CYr, Cnr, Clr, CYp, Clp, Cnp,
                                      CLde, CYdr, Cmde, Cndr, Cldr, Clda, Cnda,
@@ -532,7 +537,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     if (identMode == LONGITUDINAL) {
         /** LONGITUDINAL IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
 
-        SX imuPitchOffset = SX::sym("imuPitchOffset");
+        SX imuPitchOffset_deg = SX::sym("imuPitchOffset_deg");
         SX CL0 = SX::sym("Cl0");            //double CL0 = KiteProps.Aerodynamics.CL0;
         //double CL0_t = KiteProps.Aerodynamics.CL0_tail;
         SX CLa_tot = SX::sym("Cla_tot");    //double CLa_tot = KiteProps.Aerodynamics.CLa_total;
@@ -578,7 +583,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
         //double CL_daoa = -2 * CLa_t * Vh * dw;
         //double Cm_daoa = -2 * CLa_t * Vh * (lt/c) * dw;
 
-        params = SX::vertcat({imuPitchOffset,
+        params = SX::vertcat({imuPitchOffset_deg,
                               CL0, CLa_tot,
                               CD0_tot, Cm0, Cma,
                               CLq, Cmq,
@@ -589,7 +594,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
         getModel<double, SX, double>(g, rho, windFrom_deg, windSpeed,
                                      b, c, AR, S,
                                      Mass, Ixx, Iyy, Izz, Ixz,
-                                     imuPitchOffset, CL0, CLa_tot, e_o,
+                                     imuPitchOffset_deg, CL0, CLa_tot, e_o,
                                      CD0_tot, CYb, Cm0, Cma, Cn0, Cnb, Cl0, Clb,
                                      CLq, Cmq, CYr, Cnr, Clr, CYp, Clp, Cnp,
                                      CLde, CYdr, Cmde, Cndr, Cldr, Clda, Cnda,
@@ -602,7 +607,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
     } else if (identMode == LATERAL) {
         /** LATERAL IDENTIFICATION PARAMETERS ----------------------------------------------------------------------- */
 
-        double imuPitchOffset = KiteProps.Geometry.ImuPitchOffset_deg * M_PI / 180.0;
+        double imuPitchOffset_deg = KiteProps.Geometry.ImuPitchOffset_deg;
 
         double CL0 = KiteProps.Aerodynamics.Cl0;                // Identify also in Lateral identification?
         //double CL0_t = KiteProps.Aerodynamics.CL0_tail;
@@ -660,7 +665,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &KiteProps, const AlgorithmPrope
         getModel<double, double, SX>(g, rho, windFrom_deg, windSpeed,
                                      b, c, AR, S,
                                      Mass, Ixx, Iyy, Izz, Ixz,
-                                     imuPitchOffset, CL0, CLa_tot, e_o,
+                                     imuPitchOffset_deg, CL0, CLa_tot, e_o,
                                      CD0_tot, CYb, Cm0, Cma, Cn0, Cnb, Cl0, Clb,
                                      CLq, Cmq, CYr, Cnr, Clr, CYp, Clp, Cnp,
                                      CLde, CYdr, Cmde, Cndr, Cldr, Clda, Cnda,
