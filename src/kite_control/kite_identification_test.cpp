@@ -60,54 +60,83 @@ struct FlightMetaData {
 };
 
 /* Parameter struct for sorting by sensitivity in descending order */
+//struct Parameter {
+//
+//    enum BoundType {
+//        REL,
+//        ABS
+//    };
+//
+//    const int id{};
+//    const std::string name;
+//    const double refValue{};
+//    const double lowerBound{};
+//    const double upperBound{};
+//
+//    double sensitivity{};
+//
+//    /* Initialization with REL/ABS bound option */
+//    Parameter(const int &id_,
+//              const std::string &name_,
+//              const double &refValue_,
+//              const BoundType boundType_,
+//              const double &lowerBound_,
+//              const double &upperBound_) :
+//
+//            id(id_),
+//            name(name_),
+//            refValue(refValue_),
+//            lowerBound((boundType_ == REL) ? (refValue_ - lowerBound_ * std::abs(refValue_)) : lowerBound_),
+//            upperBound((boundType_ == REL) ? (refValue_ + upperBound_ * std::abs(refValue_)) : upperBound_) {}
+//
+//    /* Initialization with absolute bounds */
+//    Parameter(const int &id_,
+//              const std::string &name_,
+//              const double &refValue_,
+//              const double &absoluteLowerBound_,
+//              const double &absoluteUpperBound_) :
+//
+//            id(id_),
+//            name(name_),
+//            refValue(refValue_),
+//            lowerBound(absoluteLowerBound_),
+//            upperBound(absoluteUpperBound_) {}
+//
+//    /* Initialization with absolute bounds */
+//    Parameter(const int &id_,
+//              const std::string &name_) :
+//
+//            id(id_),
+//            name(name_) {}
+//
+//    Parameter() = default;
+//
+//
+//    bool operator<(const Parameter &param) const {
+//        return sensitivity > param.sensitivity;
+//    }
+//};
+
 struct Parameter {
-
-    enum BoundType {
-        REL,
-        ABS
-    };
-
     const int id{};
     const std::string name;
-    const double refValue{};
-    const double lowerBound{};
-    const double upperBound{};
 
     double sensitivity{};
 
+    Parameter(const int &id_,
+              const std::string &name_) :
+
+            id(id_),
+            name(name_) {}
+
     Parameter() = default;
 
-    /* Initialization with REL/ABS bound option */
-    Parameter(const int &id_,
-              std::string &name_,
-              const double &refValue_,
-              const BoundType boundType_,
-              const double &lowerBound_,
-              const double &upperBound_) :
-
-            id(id_),
-            name(std::move(name_)),
-            refValue(refValue_),
-            lowerBound((boundType_ == REL) ? (refValue_ - lowerBound_ * std::abs(refValue_)) : lowerBound_),
-            upperBound((boundType_ == REL) ? (refValue_ + upperBound_ * std::abs(refValue_)) : upperBound_) {}
-
-    /* Initialization with REL/ABS bound option */
-    Parameter(const int &id_,
-              std::string &name_,
-              const double &refValue_,
-              const double &absoluteLowerBound_,
-              const double &absoluteUpperBound_) :
-
-            id(id_),
-            name(std::move(name_)),
-            refValue(refValue_),
-            lowerBound(absoluteLowerBound_),
-            upperBound(absoluteUpperBound_) {}
 
     bool operator<(const Parameter &param) const {
         return sensitivity > param.sensitivity;
     }
 };
+
 
 std::vector<FlightMetaData> readIn_identSchedule(const std::string &filedir, const std::string &identManeuver) {
 
@@ -497,8 +526,6 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const std::st
 
         /** parameter bounds */
         LBP = UBP = REF_P;
-
-        //set_abs_bounds(b + 0, kiteProps.Geometry.ImuPitchOffset_deg, -0.1, 0.1, REF_P, LBP, UBP);
 
         set_absolute_parameter_bounds(LBP, UBP, b + 0, -0.1, 0.1); // imuPitchOffset_deg
         parameterList.emplace_back(0, "PitchOffs");
