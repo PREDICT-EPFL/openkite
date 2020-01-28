@@ -61,17 +61,48 @@ struct FlightMetaData {
 
 /* Parameter struct for sorting by sensitivity in descending order */
 struct Parameter {
+
+    enum BoundType {
+        REL,
+        ABS
+    };
+
     const int id{};
     const std::string name;
+    const double refValue{};
+    const double lowerBound{};
+    const double upperBound{};
+
     double sensitivity{};
 
     Parameter() = default;
 
+    /* Initialization with REL/ABS bound option */
     Parameter(const int &id_,
-              std::string name_) :
+              std::string &name_,
+              const double &refValue_,
+              const BoundType boundType_,
+              const double &lowerBound_,
+              const double &upperBound_) :
 
             id(id_),
-            name(std::move(name_)) {}
+            name(std::move(name_)),
+            refValue(refValue_),
+            lowerBound((boundType_ == REL) ? (refValue_ - lowerBound_ * std::abs(refValue_)) : lowerBound_),
+            upperBound((boundType_ == REL) ? (refValue_ + upperBound_ * std::abs(refValue_)) : upperBound_) {}
+
+    /* Initialization with REL/ABS bound option */
+    Parameter(const int &id_,
+              std::string &name_,
+              const double &refValue_,
+              const double &absoluteLowerBound_,
+              const double &absoluteUpperBound_) :
+
+            id(id_),
+            name(std::move(name_)),
+            refValue(refValue_),
+            lowerBound(absoluteLowerBound_),
+            upperBound(absoluteUpperBound_) {}
 
     bool operator<(const Parameter &param) const {
         return sensitivity > param.sensitivity;
@@ -330,32 +361,35 @@ void create_nlpSolver(const SX &opt_var, const SX &fitting_error, const SX &diff
     nlpSolver = nlpsol("solver", "ipopt", NLP, OPTS);
 }
 
-void setup_optimizationParameters(const KiteProperties &kite_props, const std::string &identManeuver,
+void setup_optimizationParameters(const KiteProperties &kiteProps, const std::string &identManeuver,
 
                                   DM &REF_P, DM &LBP, DM &UBP, std::list<Parameter> &parameterList) {
 
-    /** parameter bounds preparation */
+    /** enviromental constants */
+    double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
+    double rho = 1.2985; /** standard atmospheric density [kg/m3] [standard Atmosphere 1976] */
+
     /** --------------------- **/
     /** Wind properties       **/
     /** --------------------- **/
-    //double windFrom_deg = kite_props.Wind.WindFrom_deg;
-    //double windSpeed = kite_props.Wind.WindSpeed;
+    double windFrom_deg = kiteProps.Wind.WindFrom_deg;
+    double windSpeed = kiteProps.Wind.WindSpeed;
 
     /** --------------------- **/
     /** Geometric parameters  **/
     /** --------------------- **/
-    double imuPitchOffset_deg = kite_props.Geometry.ImuPitchOffset_deg;
+    double imuPitchOffset_deg = kiteProps.Geometry.ImuPitchOffset_deg;
 
-    //double b = kite_props.Geometry.WingSpan;
-    //double c = kite_props.Geometry.MAC;
-    //double AR = kite_props.Geometry.AspectRatio;
-    //double S = kite_props.Geometry.WingSurfaceArea;
-    //double lam = kite_props.Geometry.TaperRatio;
-    //double St = kite_props.Geometry.HTailsurface;
-    //double lt = kite_props.Geometry.TailLeverArm;
-    //double Sf = kite_props.Geometry.FinSurfaceArea;
-    //double lf = kite_props.Geometry.FinLeverArm;
-    //double Xac = kite_props.Geometry.AerodynamicCenter;
+    double b = kiteProps.Geometry.WingSpan;
+    double c = kiteProps.Geometry.MAC;
+    double AR = kiteProps.Geometry.AspectRatio;
+    double S = kiteProps.Geometry.WingSurfaceArea;
+    //double lam = KiteProps.Geometry.TaperRatio;
+    //double St = KiteProps.Geometry.HTailsurface;
+    //double lt = KiteProps.Geometry.TailLeverArm;
+    //double Sf = KiteProps.Geometry.FinSurfaceArea;
+    //double lf = KiteProps.Geometry.FinLeverArm;
+    //double Xac = KiteProps.Geometry.AerodynamicCenter;
     /** @todo: get rid of all magic numbers **/
     //double Xcg = 0.031/c;               /** Center of Gravity (CoG) wrt leading edge [1/c] **/
     //double Vf = (Sf * lf) / (S * b);    /** fin volume coefficient []                      **/
@@ -364,55 +398,65 @@ void setup_optimizationParameters(const KiteProperties &kite_props, const std::s
     /** --------------------------- **/
     /** Mass and inertia parameters **/
     /** --------------------------- **/
-    //double Mass = kite_props.Inertia.Mass;
-    //double Ixx = kite_props.Inertia.Ixx;
-    //double Iyy = kite_props.Inertia.Iyy;
-    //double Izz = kite_props.Inertia.Izz;
-    //double Ixz = kite_props.Inertia.Ixz;
+    double Mass = kiteProps.Inertia.Mass;
+    double Ixx = kiteProps.Inertia.Ixx;
+    double Iyy = kiteProps.Inertia.Iyy;
+    double Izz = kiteProps.Inertia.Izz;
+    double Ixz = kiteProps.Inertia.Ixz;
 
     /** ------------------------------- **/
-    /** Static aerodynamic coefficients **/
+    /** Aerodynamic parameters          **/
     /** ------------------------------- **/
-    double CL0 = kite_props.Aerodynamics.CL0;
-    //double CL0_t = kite_props.Aerodynamics.CL0_tail;
-    double CLa_tot = kite_props.Aerodynamics.CLa_total;
-    //double CLa_w = kite_props.Aerodynamics.CLa_wing;
-    //double CLa_t = kite_props.Aerodynamics.CLa_tail;
-    //double e_o = kite_props.Aerodynamics.e_oswald;
+    double e_o = kiteProps.Aerodynamics.e_oswald;
+    double CD0 = kiteProps.Aerodynamics.CD0;
 
-    double CD0_tot = kite_props.Aerodynamics.CD0_total;
-    //double CD0_w = kite_props.Aerodynamics.CD0_wing;
-    //double CD0_t = kite_props.Aerodynamics.CD0_tail;
-    double CYb = kite_props.Aerodynamics.CYb;
-    //double CYb_vt = kite_props.Aerodynamics.CYb_vtail;
-    double Cm0 = kite_props.Aerodynamics.Cm0;
-    double Cma = kite_props.Aerodynamics.Cma;
-    double Cn0 = kite_props.Aerodynamics.Cn0;
-    double Cnb = kite_props.Aerodynamics.Cnb;
-    double Cl0 = kite_props.Aerodynamics.Cl0;
-    double Clb = kite_props.Aerodynamics.Clb;
-    //double dw = CLa_tot / (pi * e_o * AR);             /** downwash acting at the tail [] **/
 
-    double CLq = kite_props.Aerodynamics.CLq;
-    double Cmq = kite_props.Aerodynamics.Cmq;
-    double CYr = kite_props.Aerodynamics.CYr;
-    double Cnr = kite_props.Aerodynamics.Cnr;
-    double Clr = kite_props.Aerodynamics.Clr;
-    double CYp = kite_props.Aerodynamics.CYp;
-    double Clp = kite_props.Aerodynamics.Clp;
-    double Cnp = kite_props.Aerodynamics.Cnp;
+    /* AOA */
+    double CL0 = kiteProps.Aerodynamics.CL0;
+    double CLa = kiteProps.Aerodynamics.CLa;
+
+    double Cm0 = kiteProps.Aerodynamics.Cm0;
+    double Cma = kiteProps.Aerodynamics.Cma;
+
+    /* Sideslip */
+    double CYb = kiteProps.Aerodynamics.CYb;
+
+    double Cl0 = kiteProps.Aerodynamics.Cl0;
+    double Clb = kiteProps.Aerodynamics.Clb;
+
+    double Cn0 = kiteProps.Aerodynamics.Cn0;
+    double Cnb = kiteProps.Aerodynamics.Cnb;
+
+    /* Pitchrate */
+    double CLq = kiteProps.Aerodynamics.CLq;
+    double Cmq = kiteProps.Aerodynamics.Cmq;
+
+    /* Rollrate */
+    double CYp = kiteProps.Aerodynamics.CYp;
+    double Clp = kiteProps.Aerodynamics.Clp;
+    double Cnp = kiteProps.Aerodynamics.Cnp;
+
+    /* Yawrate */
+    double CYr = kiteProps.Aerodynamics.CYr;
+    double Clr = kiteProps.Aerodynamics.Clr;
+    double Cnr = kiteProps.Aerodynamics.Cnr;
+
 
     /** ------------------------------ **/
     /** Aerodynamic effects of control **/
     /** ------------------------------ **/
-    double CLde = kite_props.Aerodynamics.CLde;
-    double CYdr = kite_props.Aerodynamics.CYdr;
-    double Cmde = kite_props.Aerodynamics.Cmde;
-    double Cndr = kite_props.Aerodynamics.Cndr;
-    double Cldr = kite_props.Aerodynamics.Cldr;
-    //double CDde = kite_props.Aerodynamics.CDde;
-    double Clda = kite_props.Aerodynamics.Clda;
-    double Cnda = kite_props.Aerodynamics.Cnda;
+    /* Elevator */
+    double CLde = kiteProps.Aerodynamics.CLde;
+    double Cmde = kiteProps.Aerodynamics.Cmde;
+
+    /* Ailerons */
+    double Clda = kiteProps.Aerodynamics.Clda;
+    double Cnda = kiteProps.Aerodynamics.Cnda;
+
+    /* Rudder */
+    double CYdr = kiteProps.Aerodynamics.CYdr;
+    double Cldr = kiteProps.Aerodynamics.Cldr;
+    double Cndr = kiteProps.Aerodynamics.Cndr;
 
     //double CL_daoa = -2 * CLa_t * Vh * dw;
     //double Cm_daoa = -2 * CLa_t * Vh * (lt/c) * dw;
@@ -420,18 +464,12 @@ void setup_optimizationParameters(const KiteProperties &kite_props, const std::s
     /** ------------------------------ **/
     /**        Tether parameters       **/
     /** ------------------------------ **/
-    //    double Lt = kite_props.Tether.length;
-    //    double Ks = kite_props.Tether.Ks;
-    //    double Kd = kite_props.Tether.Kd;
-    //    double rx = kite_props.Tether.rx;
-    //    double ry = kite_props.Tether.ry;
-    //    double rz = kite_props.Tether.rz;
-
-    // LBP(21] = 2.65;    UBP(21] = 2.75;   // tether length
-    // LBP(22] = 150.0;  UBP(22] = 150.0;  // Ks
-    // LBP(23] = 0.0;    UBP(23] = 10;   // Kd
-    // LBP(24] = 0.0;    UBP(24] = 0.0;   // rx
-    // LBP(25] = 0.0;    UBP(25] = 0.0;  // rz
+    //    double Lt = KiteProps.Tether.length;
+    //    double Ks = KiteProps.Tether.Ks;
+    //    double Kd = KiteProps.Tether.Kd;
+    //    double rx = KiteProps.Tether.rx;
+    //    double ry = KiteProps.Tether.ry;
+    //    double rz = KiteProps.Tether.rz;
 
     //DM REF_P = DM::vertcat({Lt, Ks, Kd, rx, ry, rz});
 
@@ -441,28 +479,40 @@ void setup_optimizationParameters(const KiteProperties &kite_props, const std::s
 
         REF_P = DM::vertcat({REF_P,
                              imuPitchOffset_deg,
-                             CL0, CLa_tot,
-                             CD0_tot, Cm0, Cma,
-                             CLq, Cmq,
-                             CLde, Cmde,
+
+                             CD0,
+
+                             CL0,
+                             CLa,
+
+                             Cm0,
+                             Cma,
+
+                             CLq,
+                             Cmq,
+
+                             CLde,
+                             Cmde
                             }); // 10 longitudinal parameters
 
         /** parameter bounds */
-        LBP = REF_P;
-        UBP = REF_P;
+        LBP = UBP = REF_P;
+
+        //set_abs_bounds(b + 0, kiteProps.Geometry.ImuPitchOffset_deg, -0.1, 0.1, REF_P, LBP, UBP);
 
         set_absolute_parameter_bounds(LBP, UBP, b + 0, -0.1, 0.1); // imuPitchOffset_deg
         parameterList.emplace_back(0, "PitchOffs");
 
-        set_relative_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.1, 0.5); // CL0
-        set_relative_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.05, 0.1); // CLa_tot
-        parameterList.emplace_back(1, "CL0");
-        parameterList.emplace_back(2, "CLa_tot");
+        set_relative_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.7); // CD0
+        parameterList.emplace_back(1, "CD0");
 
-        set_relative_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.5, 0.7); // CD0_tot
+        set_relative_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.1, 0.5); // CL0
+        set_relative_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.05, 0.1); // CLa_
+        parameterList.emplace_back(2, "CL0");
+        parameterList.emplace_back(3, "CLa");
+
         set_relative_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5); // Cm0
         set_relative_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.1, 0.3); // Cma
-        parameterList.emplace_back(3, "CD0_tot");
         parameterList.emplace_back(4, "Cm0");
         parameterList.emplace_back(5, "Cma");
 
@@ -482,46 +532,63 @@ void setup_optimizationParameters(const KiteProperties &kite_props, const std::s
     /** LATERAL IDENTIFICATION PARAMETERS --------------------------------------------------------------------------- */
     if (identManeuver == "identRoll") {
         int b = REF_P.size1(); // parameter size before
+
         REF_P = DM::vertcat({REF_P,
-                             CYb, Cnb, Clb,
-                             CYr, Cnr, Clr, CYp, Clp, Cnp,
-                             CYdr, Cndr, Cldr, Clda, Cnda,
-                            }); // 14 lateral parameters
+                             CYb,
+
+                             Clb,
+
+                             Cnb,
+
+                             CYp,
+                             Clp,
+                             Cnp,
+
+                             CYr,
+                             Clr,
+                             Cnr,
+
+                             Clda,
+                             Cnda
+                            }); // 11 lateral parameters (aileron only)
 
         /** parameter bounds */
-        LBP = REF_P;
-        UBP = REF_P;
+        LBP = UBP = REF_P;
 
         set_relative_parameter_bounds(LBP, UBP, b + 0, REF_P, -0.5, 0.5);  // CYb
-        set_relative_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.5);  // Cnb
-        set_relative_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.5, 0.5);  // Clb
         parameterList.emplace_back(0, "CYb");
-        parameterList.emplace_back(1, "Cnb");
-        parameterList.emplace_back(2, "Clb");
 
-        set_relative_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.3, 0.3);  // CYr
-        set_relative_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5);  // Cnr
-        set_relative_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.5, 0.5);  // Clr
-        set_relative_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.5, 0.5);  // CYp
-        set_relative_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5);  // Clp
-        set_relative_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.3, 1.0);  // Cnp
-        parameterList.emplace_back(3, "CYr");
-        parameterList.emplace_back(4, "Cnr");
-        parameterList.emplace_back(5, "Clr");
-        parameterList.emplace_back(6, "CYp");
-        parameterList.emplace_back(7, "Clp");
-        parameterList.emplace_back(8, "Cnp");
+        set_relative_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.5);  // Clb
+        parameterList.emplace_back(1, "Clb");
 
-        set_relative_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5);  // CYdr
-        set_relative_parameter_bounds(LBP, UBP, b + 10, REF_P, -0.5, 0.5);  // Cndr
-        set_relative_parameter_bounds(LBP, UBP, b + 11, REF_P, -0.5, 0.5);  // Cldr
-        set_relative_parameter_bounds(LBP, UBP, b + 12, REF_P, -0.5, 0.5);  // Clda
-        set_relative_parameter_bounds(LBP, UBP, b + 13, REF_P, -0.5, 0.5);  // Cnda
-        parameterList.emplace_back(9, "CYdr");
-        parameterList.emplace_back(10, "Cndr");
-        parameterList.emplace_back(11, "Cldr");
-        parameterList.emplace_back(12, "Clda");
-        parameterList.emplace_back(13, "Cnda");
+        set_relative_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.5, 0.5);  // Cnb
+        parameterList.emplace_back(2, "Cnb");
+
+        set_relative_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.5, 0.5);  // CYp
+        set_relative_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5);  // Clp
+        set_relative_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.3, 1.0);  // Cnp
+        parameterList.emplace_back(3, "CYp");
+        parameterList.emplace_back(4, "Clp");
+        parameterList.emplace_back(5, "Cnp");
+
+        set_relative_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.3, 0.3);  // CYr
+        set_relative_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5);  // Clr
+        set_relative_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5);  // Cnr
+        parameterList.emplace_back(6, "CYr");
+        parameterList.emplace_back(7, "Clr");
+        parameterList.emplace_back(8, "Cnr");
+
+        set_relative_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5);  // Clda
+        set_relative_parameter_bounds(LBP, UBP, b + 10, REF_P, -0.5, 0.5);  // Cnda
+        parameterList.emplace_back(9, "Clda");
+        parameterList.emplace_back(10, "Cnda");
+
+//        set_relative_parameter_bounds(LBP, UBP, b + 11, REF_P, -0.5, 0.5);  // CYdr
+//        set_relative_parameter_bounds(LBP, UBP, b + 12, REF_P, -0.5, 0.5);  // Cldr
+//        set_relative_parameter_bounds(LBP, UBP, b + 13, REF_P, -0.5, 0.5);  // Cndr
+//        parameterList.emplace_back(11, "CYdr");
+//        parameterList.emplace_back(12, "Cldr");
+//        parameterList.emplace_back(13, "Cndr");
 
     }
     /** END OF LATERAL IDENTIFICATION PARAMETERS -------------------------------------------------------------------- */
@@ -558,18 +625,27 @@ void write_parameterFile(const std::string &kite_params_in_filepath, const std::
 
     /** LONGITUDINAL IDENTIFICATION PARAMETERS ---------------------------------------------------------------------- */
     if (identManeuver == "identPitch") {
+
         kite_params_yaml["geometry"]["imu_pitch_offs_deg"] = new_params_vec[0];
 
-        kite_params_yaml["aerodynamic"]["CL0"] = new_params_vec[1];
-        kite_params_yaml["aerodynamic"]["CLa_total"] = new_params_vec[2];
 
-        kite_params_yaml["aerodynamic"]["CD0_total"] = new_params_vec[3];
+        kite_params_yaml["aerodynamic"]["CD0"] = new_params_vec[1];
+
+        /* AOA */
+        kite_params_yaml["aerodynamic"]["CL0"] = new_params_vec[2];
+        kite_params_yaml["aerodynamic"]["CLa"] = new_params_vec[3];
+
         kite_params_yaml["aerodynamic"]["Cm0"] = new_params_vec[4];
         kite_params_yaml["aerodynamic"]["Cma"] = new_params_vec[5];
 
+
+        /* Pitchrate */
         kite_params_yaml["aerodynamic"]["CLq"] = new_params_vec[6];
         kite_params_yaml["aerodynamic"]["Cmq"] = new_params_vec[7];
 
+
+        /* Aerodynamic effects of control */
+        /* Elevator */
         kite_params_yaml["aerodynamic"]["CLde"] = new_params_vec[8];
         kite_params_yaml["aerodynamic"]["Cmde"] = new_params_vec[9];
     }
@@ -577,23 +653,35 @@ void write_parameterFile(const std::string &kite_params_in_filepath, const std::
 
     /** LATERAL IDENTIFICATION PARAMETERS --------------------------------------------------------------------------- */
     if (identManeuver == "identRoll") {
+
+        /* Sideslip */
         kite_params_yaml["aerodynamic"]["CYb"] = new_params_vec[0];
-        kite_params_yaml["aerodynamic"]["Cn0"] = new_params_vec[1];
+
+        kite_params_yaml["aerodynamic"]["Clb"] = new_params_vec[1];
+
         kite_params_yaml["aerodynamic"]["Cnb"] = new_params_vec[2];
-        kite_params_yaml["aerodynamic"]["Clb"] = new_params_vec[3];
 
-        kite_params_yaml["aerodynamic"]["CYr"] = new_params_vec[4];
-        kite_params_yaml["aerodynamic"]["Cnr"] = new_params_vec[5];
-        kite_params_yaml["aerodynamic"]["Clr"] = new_params_vec[6];
-        kite_params_yaml["aerodynamic"]["CYp"] = new_params_vec[7];
-        kite_params_yaml["aerodynamic"]["Clp"] = new_params_vec[8];
-        kite_params_yaml["aerodynamic"]["Cnp"] = new_params_vec[9];
 
-        kite_params_yaml["aerodynamic"]["CYdr"] = new_params_vec[10];
-        kite_params_yaml["aerodynamic"]["Cndr"] = new_params_vec[11];
-        kite_params_yaml["aerodynamic"]["Cldr"] = new_params_vec[12];
-        kite_params_yaml["aerodynamic"]["Clda"] = new_params_vec[13];
-        kite_params_yaml["aerodynamic"]["Cnda"] = new_params_vec[14];
+        /* Rollrate */
+        kite_params_yaml["aerodynamic"]["CYp"] = new_params_vec[3];
+        kite_params_yaml["aerodynamic"]["Clp"] = new_params_vec[4];
+        kite_params_yaml["aerodynamic"]["Cnp"] = new_params_vec[5];
+
+        /* Yawrate */
+        kite_params_yaml["aerodynamic"]["CYr"] = new_params_vec[6];
+        kite_params_yaml["aerodynamic"]["Clr"] = new_params_vec[7];
+        kite_params_yaml["aerodynamic"]["Cnr"] = new_params_vec[8];
+
+
+        /* Aerodynamic effects of control */
+        /* Ailerons */
+        kite_params_yaml["aerodynamic"]["Clda"] = new_params_vec[9];
+        kite_params_yaml["aerodynamic"]["Cnda"] = new_params_vec[10];
+
+//        /* Rudder */
+//        kite_params_yaml["aerodynamic"]["CYdr"] = new_params_vec[11];
+//        kite_params_yaml["aerodynamic"]["Cldr"] = new_params_vec[12];
+//        kite_params_yaml["aerodynamic"]["Cndr"] = new_params_vec[13];
     }
     /** END OF LATERAL IDENTIFICATION PARAMETERS -------------------------------------------------------------------- */
 
@@ -795,10 +883,10 @@ int main() {
     const int dimu = 4;   // T elev rud ail
 
     /// 1. Identification mode ///
-    KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LATERAL;
+    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LATERAL;
 
-    /// 2. lon: 10, lat: 14 identification parameters ///
-    const int dimp = 14;
+    /// 2. lon: 10, lat: 11 identification parameters ///
+    const int dimp = 11;
 
     /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
     // pitch / longitudinal
@@ -814,7 +902,18 @@ int main() {
     //OptProblemProperties opp(13, 4, 10, 346, 3, 115);
     //OptProblemProperties opp(dimx, dimu, dimp, DATA_POINTS, poly_order, num_segments);
 
+    const int n_optimizationFailed_max = 3;
+
     /// ============================================================================================================ ///
+    /* User config check */
+    if (!(
+            (identMode == KiteDynamics::IdentMode::LONGITUDINAL && dimp == 10 && DATA_POINTS == 346)
+            ||
+            (identMode == KiteDynamics::IdentMode::LATERAL && dimp == 11 && DATA_POINTS == 325))) {
+
+        std::cout << "Identification mode/dimp/DATA_POINTS mismatch. Check user config!\n";
+        return EXIT_FAILURE;
+    }
 
     std::string identManeuver;
     if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
@@ -826,7 +925,7 @@ int main() {
     std::cout << "Running " << identManeuver << " identification of " << dimp << " parameters with "
               << DATA_POINTS << " data points.\n";
 
-    /** Load identification schedule **/
+    /* Load identification schedule */
     std::vector<FlightMetaData> flights = readIn_identSchedule(flightDataDir, identManeuver);
 
     /* Cost matrix */
@@ -863,11 +962,13 @@ int main() {
     /** Sequence loop ============================================================================================== **/
     for (const auto &flight : flights) {
 
+        /* Print current sequence */
         std::cout << std::left
                   << "\n---------------------------------------------------------"
                   << "\nData: "
                   << flight.session << "-" << flight.number << "-" << flight.seq
                   << " (Session-Flight-Sequence)\n";
+
 
         /* Construct sequence directory path */
         std::string seq_dir;
@@ -880,7 +981,6 @@ int main() {
         /** Read in all sequence data **/
         DM id_time;
         DM id_states_woTime;
-        //DM id_controls_woTime;
         DM id_controls_rev_woTime;
 
         int windFrom_deg{0};
@@ -916,12 +1016,12 @@ int main() {
         SX fitting_error = 0;
         for (uint jTimeStep = 0; jTimeStep < DATA_POINTS; ++jTimeStep) {
 
-            /* Measured states at one DATA_POINT */
+            /* Measured and to be optimized state at one DATA_POINT */
             SX measured_state = id_states_woTime(Slice(0, dimx), jTimeStep);
             SX state_to_optimize = varx_(Slice(0, dimx), DATA_POINTS - jTimeStep - 1); // time-reverse
 
+            /* Error and sum up */
             SX error = measured_state - state_to_optimize;
-
             fitting_error += static_cast<double>(1.0 / DATA_POINTS) * SX::sum1(SX::mtimes(Q, pow(error, 2)));
 
         }
@@ -966,6 +1066,8 @@ int main() {
         DM temp_x;
         DM temp_lam_g;
         DM temp_lam_x;
+
+        int i_optimization_failed{0};
 
         for (int iIt = 0; iIt < nIt; ++iIt) {
 
@@ -1024,19 +1126,14 @@ int main() {
 
             if (!temp_x.is_empty()) {
                 /* Use found trajectory from last iteration as initial feasible guess for this iteration */
-
                 std::cout << "Using initial guess from last iteration.\n";
 
                 ARG["x0"] = temp_x;
                 ARG["lam_x0"] = temp_lam_x;
                 ARG["lam_g0"] = temp_lam_g;
-//                std::cout << "temp_x " << temp_x.size() << temp_x << "\n";
-//                std::cout << "temp_lam_x " << temp_lam_x.size()  << temp_lam_x << "\n";
-//                std::cout << "temp_lam_g " << temp_lam_g.size() << temp_lam_g << "\n";
 
             } else {
                 /* Provide initial guess from integrator by flying at constant control input */
-
                 std::cout << "Computing initial guess from integrator.\n";
 
                 casadi::DMDict props;
@@ -1056,17 +1153,9 @@ int main() {
                 feasible_guess = ps_solver.solve_trajectory(id_state0, init_control, true);
 
                 DM feasible_traj = feasible_guess.at("x");
-//                std::cout << "feasible traj: " << feasible_traj.size() << feasible_traj << "\n";
-//                std::cout << "feasible lam_x0: " << feasible_guess.at("lam_x").size() << feasible_guess.at("lam_x") << "\n";
-//                std::cout << "feasible lam_g0: " << feasible_guess.at("lam_g").size() << feasible_guess.at("lam_g") << "\n";
-
                 ARG["x0"] = casadi::DM::vertcat({feasible_traj, REF_P});
                 ARG["lam_x0"] = DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())});
                 ARG["lam_g0"] = feasible_guess.at("lam_g");
-//                std::cout << "x0: " <<  casadi::DM::vertcat({feasible_traj, REF_P}).size() <<  casadi::DM::vertcat({feasible_traj, REF_P}) << "\n";
-//                std::cout << "lam_g0: " <<  DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())}).size() <<  DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())}) << "\n";
-//                std::cout << "lam_x0: " << feasible_guess.at("lam_g").size() << feasible_guess.at("lam_g") << "\n";
-
                 std::cout << "Initial guess found.\n";
             }
 
@@ -1092,20 +1181,28 @@ int main() {
             Dict stats = nlp_solver_func.stats();
             std::string solve_status = static_cast<std::string>(stats["return_status"]);
             if (solve_status == "Invalid_Number_Detected") {
-                //std::cout << "X0 : " << ARG["x0"] << "\n";
-                std::cout << "Invalid number detected!\n";
-                iIt = nIt;
-                continue;
+                ++i_optimization_failed;
+                if (i_optimization_failed >= n_optimizationFailed_max) {
+                    std::cout << "Invalid number detected!\n";
+                    iIt = nIt;
+                    continue;
+                }
             }
             if (solve_status == "Infeasible_Problem_Detected") {
-                std::cout << "Infeasible problem detected. Stopping iterations on this sequence. \n";
-                iIt = nIt;
-                continue;
+                ++i_optimization_failed;
+                if (i_optimization_failed >= n_optimizationFailed_max) {
+                    std::cout << "Infeasible problem detected. Stopping iterations on this sequence. \n";
+                    iIt = nIt;
+                    continue;
+                }
             }
             if (solve_status == "Restoration_Failed") {
-                std::cout << "Restoration failed! Stopping iterations on this sequence. \n";
-                iIt = nIt;
-                continue;
+                ++i_optimization_failed;
+                if (i_optimization_failed >= n_optimizationFailed_max) {
+                    std::cout << "Restoration failed! Stopping iterations on this sequence. \n";
+                    iIt = nIt;
+                    continue;
+                }
             }
 
             /* Save results for next iteration */

@@ -37,42 +37,61 @@ struct PlaneInertia {
 };
 
 struct PlaneAerodynamics {
-    double CL0;
-    double CL0_tail;
-    double CLa_total;
-    double CLa_wing;
-    double CLa_tail;
     double e_oswald;
 
-    double CD0_total;
-    double CD0_wing;
-    double CD0_tail;
-    double CYb;
-    double CYb_vtail;
+    /* Static Drag force (D) (total Drag force of aircraft) */
+    double CD0;
+
+
+    /* Angle of attack (alpha) -> Lift force (L) (total Lift force of aircraft) */
+    double CL0;
+    double CLa;
+
+    /* Angle of attack (alpha) -> Pitching moment (m) */
     double Cm0;
     double Cma;
-    double Cn0;
-    double Cnb;
+
+
+    /* Sideslip angle (beta) -> Side force (Y) */
+    double CYb;
+
+    /* Sideslip angle (beta) -> Rolling moment (l) */
     double Cl0;
     double Clb;
 
+    /* Sideslip angle (beta) -> Yawing moment (n) */
+    double Cn0;
+    double Cnb;
+
+
+    /* Pitchrate (q) -> Lift force (L), Pitching moment (m) */
     double CLq;
     double Cmq;
-    double CYr;
-    double Cnr;
-    double Clr;
+
+    /* Rollrate (p) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
     double CYp;
     double Clp;
     double Cnp;
 
+    /* Yawrate (r) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
+    double CYr;
+    double Clr;
+    double Cnr;
+
+
+    /** Aerodynamic effects of control **/
+    /* Elevator deflection (de) -> Lift force (L), Pitching moment (m), Drag force (D) */
     double CLde;
-    double CYdr;
     double Cmde;
-    double Cndr;
-    double Cldr;
-    double CDde;
+
+    /* Aileron deflection (da) -> Rolling moment (l), Yawing moment (n) */
     double Clda;
     double Cnda;
+
+    /* Rudder deflection (dr) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
+    double CYdr;
+    double Cldr;
+    double Cndr;
 };
 
 struct TetherProperties {
@@ -159,20 +178,61 @@ public:
 
     casadi::Function getAeroDynamicForces() { return this->AeroDynamics; }
 
-    template<typename P, typename PO, typename PA>
-    void getModel(P &g, P &rho, P &windFrom_deg, P &windSpeed,
+    template<typename P, typename LO, typename LA>
+    void getModel(P &g, P &rho,
+                  P &windFrom_deg, P &windSpeed,
                   P &b, P &c, P &AR, P &S,
                   P &Mass, P &Ixx, P &Iyy, P &Izz, P &Ixz,
 
-                  PO &imuPitchOffset_deg, PO &CL0, PO &CLa_tot, P &e_o,
+                  LO &imuPitchOffset_deg,
 
-                  PO &CD0_tot, PA &CYb, PO &Cm0, PO &Cma, P &Cn0, PA &Cnb, P &Cl0, PA &Clb,
-                  PO &CLq, PO &Cmq, PA &CYr, PA &Cnr, PA &Clr, PA &CYp, PA &Clp, PA &Cnp,
-                  PO &CLde, PA &CYdr, PO &Cmde, PA &Cndr, PA &Cldr, PA &Clda, PA &Cnda,
 
-                  casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q, casadi::SX &T, casadi::SX &dE,
-                  casadi::SX &dR, casadi::SX &dA, casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot,
-                  casadi::SX &q_dot, casadi::SX &Faero_b, casadi::SX &T_b);
+                  P &e_o,
+                  LO &CD0,
+
+
+                  LO &CL0,
+                  LO &CLa,
+
+                  LO &Cm0,
+                  LO &Cma,
+
+
+                  LA &CYb,
+
+                  P &Cl0,
+                  LA &Clb,
+
+                  P &Cn0,
+                  LA &Cnb,
+
+
+                  LO &CLq,
+                  LO &Cmq,
+
+                  LA &CYp,
+                  LA &Clp,
+                  LA &Cnp,
+
+                  LA &CYr,
+                  LA &Clr,
+                  LA &Cnr,
+
+
+                  LO &CLde,
+                  LO &Cmde,
+
+                  LA &Clda,
+                  LA &Cnda,
+
+                  P &CYdr,
+                  P &Cldr,
+                  P &Cndr,
+
+                  casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
+                  casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
+                  casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
+                  casadi::SX &Faero_b, casadi::SX &T_b);
 
 private:
     //state variables
