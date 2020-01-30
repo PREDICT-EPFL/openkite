@@ -273,6 +273,62 @@ void readIn_sequenceData(const std::string &seq_dir, const FlightMetaData &fligh
                        kite_baseParams_dir, kite_baseParams_filename, nIt, kite_params_warmStart);
 }
 
+void readin_optResultsFile(const std::string &filepath,
+
+                           DM &optResult_x, DM &optResult_lam_x, DM &optResult_lam_g) {
+
+    std::ifstream optRes_file(filepath, std::ios::in);
+
+    if (!optRes_file.fail()) {
+
+
+        std::stringstream linestream;
+        std::string line;
+
+        std::string str;
+        double number{0};
+
+        /** First line **/
+        getline(optRes_file, line);
+        linestream << line;
+
+        linestream >> str;
+        int i{0};
+        while (linestream >> number) {
+            optResult_x(i) = number;
+            ++i;
+        }
+        linestream.clear();
+
+        /** Second line **/
+        getline(optRes_file, line);
+        linestream << line;
+
+        linestream >> str;
+        int j{0};
+        while (linestream >> number) {
+            optResult_lam_x(j) = number;
+            ++j;
+        }
+        linestream.clear();
+
+        /** Third line **/
+        getline(optRes_file, line);
+        linestream << line;
+
+        linestream >> str;
+        int k{0};
+        while (linestream >> number) {
+            optResult_lam_g(k) = number;
+            ++k;
+        }
+
+    } else {
+        std::cout << "Could not open optResult file.\n";
+        optRes_file.clear();
+    }
+}
+
 
 /* Set up */
 void get_costMatrix(const KiteDynamics::IdentMode identMode,
@@ -460,6 +516,33 @@ void write_trajectoryFile(const DM &traj, const std::string &filepath) {
     }
 
     traj_file.close();
+}
+
+void write_optResultsFile(const DM &optResult_x, const DM &optResult_lam_x, const DM &optResult_lam_g,
+                          const std::string &filepath) {
+
+    std::ofstream optRes_file(filepath, std::ios::out);
+    optRes_file.precision(15);
+
+    optRes_file << "optResult_x: ";
+    for (int i = 0; i < optResult_x.size1() - 1; i++) {
+        optRes_file << optResult_x(i) << " ";
+    }
+    optRes_file << optResult_x(optResult_x.size1() - 1) << "\n";
+
+    optRes_file << "optResult_lam_x: ";
+    for (int i = 0; i < optResult_lam_x.size1() - 1; i++) {
+        optRes_file << optResult_lam_x(i) << " ";
+    }
+    optRes_file << optResult_lam_x(optResult_lam_x.size1() - 1) << "\n";
+
+    optRes_file << "optResult_lam_g: ";
+    for (int i = 0; i < optResult_lam_g.size1() - 1; i++) {
+        optRes_file << optResult_lam_g(i) << " ";
+    }
+    optRes_file << optResult_lam_g(optResult_lam_g.size1() - 1);
+
+    optRes_file.close();
 }
 
 void print_singleParameterOutput(const int paramNumber, const std::string &paramName,
@@ -809,9 +892,9 @@ int main() {
         std::cout << "Running " << nIt << " iteration(s) on base parameters: " << kite_baseParams_filename << "\n";
 
         std::string kite_params_out_filepath;
-        DM temp_x;
-        DM temp_lam_g;
-        DM temp_lam_x;
+        DM optResult_x;
+        DM optResult_lam_x;
+        DM optResult_lam_g;
 
         int i_optimization_failed{0};
 
@@ -823,17 +906,21 @@ int main() {
                 kite_params_in_filepath = kite_params_out_filepath;
             }
 
+            /* Parameter out filepath after this iteration */
             std::string kite_params_out_dir = seq_dir + "params_new/" + kite_baseParams_filename + "/";
             std::string afterItStr = "afterIt_" + std::to_string(iIt + 1);
             kite_params_out_filepath = kite_params_out_dir + afterItStr + ".yaml";
 
-            if (kite_params_warmStart) {
-                if (kite_utils::file_exists(kite_params_out_filepath)) {
-                    continue;
-                }
-            }
+            std::string optResults0_filepath = kite_params_out_dir + "optResults_0.txt";
 
-            std::cout << "\nIteration " << iIt + 1 << "\n";
+            if (kite_params_warmStart && kite_utils::file_exists(kite_params_out_filepath)) {
+                /* Skip this loop, as it has already been done. */
+                std::cout << "\nSkipping parameter iteration " << iIt + 1 << " (already done).\n";
+                continue;
+            } /* Start iterated optimization from here. */
+
+            std::cout << "\nParameter iteration " << iIt + 1 << "\n";
+
             std::cout << "Kite param file IN: " << kite_params_in_filepath << "\n";
             KiteProperties kite_props_in = kite_utils::LoadProperties(kite_params_in_filepath);
 
@@ -871,40 +958,50 @@ int main() {
 
             DMDict feasible_guess;
 
-            if (!temp_x.is_empty()) {
-                /* Use found trajectory from last iteration as initial feasible guess for this iteration */
-                std::cout << "Using initial guess from last iteration.\n";
+            if (optResult_x.is_empty()) {
+                if (kite_utils::file_exists(optResults0_filepath)) {
+                    /* Guess is available from file */
+                    std::cout << "Using initial guess from previous optimization (file).\n";
 
-                ARG["x0"] = temp_x;
-                ARG["lam_x0"] = temp_lam_x;
-                ARG["lam_g0"] = temp_lam_g;
+                    optResult_x = optResult_lam_x = DM::zeros(opt_var.size1());
+                    optResult_lam_g = DM::zeros(diff_constr.size1());
 
-            } else {
-                /* Provide initial guess from integrator by flying at constant control input */
-                std::cout << "Computing initial guess from integrator.\n";
+                    readin_optResultsFile(optResults0_filepath,
 
-                casadi::DMDict props;
-                props["scale"] = 0;
-                props["P"] = casadi::DM::diag(casadi::DM(
-                        {0.1, 1 / 3.0, 1 / 3.0,
-                         1 / 2.0, 1 / 5.0, 1 / 2.0,
-                         1 / 3.0, 1 / 3.0, 1 / 3.0,
-                         1.0, 1.0, 1.0, 1.0}));
-                PSODESolver<poly_order, num_segments, dimx, dimu> ps_solver(ode, tf, props);
+                                          optResult_x, optResult_lam_x, optResult_lam_g);
 
-                DM init_control = DM({0.1, 0.0, 0.0, 0.0});
-                init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
+                } else {
+                    /* Provide initial guess from integrator by flying at constant control input */
+                    std::cout << "Computing initial guess from integrator.\n";
 
-                std::cout << "init_state: " << id_state0 << " init_control: " << init_control << "\n";
+                    casadi::DMDict props;
+                    props["scale"] = 0;
+                    props["P"] = casadi::DM::diag(casadi::DM(
+                            {0.1, 1 / 3.0, 1 / 3.0,
+                             1 / 2.0, 1 / 5.0, 1 / 2.0,
+                             1 / 3.0, 1 / 3.0, 1 / 3.0,
+                             1.0, 1.0, 1.0, 1.0}));
+                    PSODESolver<poly_order, num_segments, dimx, dimu> ps_solver(ode, tf, props);
 
-                feasible_guess = ps_solver.solve_trajectory(id_state0, init_control, true);
+                    DM init_control = DM({0.1, 0.0, 0.0, 0.0});
+                    init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
 
-                DM feasible_traj = feasible_guess.at("x");
-                ARG["x0"] = casadi::DM::vertcat({feasible_traj, REF_P});
-                ARG["lam_x0"] = DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())});
-                ARG["lam_g0"] = feasible_guess.at("lam_g");
-                std::cout << "Initial guess found.\n";
+                    std::cout << "init_state: " << id_state0 << " init_control: " << init_control << "\n";
+
+                    feasible_guess = ps_solver.solve_trajectory(id_state0, init_control, true);
+
+                    DM feasible_traj = feasible_guess.at("x");
+                    optResult_x = casadi::DM::vertcat({feasible_traj, REF_P});
+                    optResult_lam_x = DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())});
+                    optResult_lam_g = feasible_guess.at("lam_g");
+                    std::cout << "Initial guess found.\n";
+                }
             }
+
+            /* Use trajectory from previous iteration as initial feasible guess for this iteration */
+            ARG["x0"] = optResult_x;
+            ARG["lam_x0"] = optResult_lam_x;
+            ARG["lam_g0"] = optResult_lam_g;
 
             /* Set initial state
              * As the problem is formulated time-reverse, the position of the initial state
@@ -939,17 +1036,14 @@ int main() {
             }
 
             /* Save results for next iteration */
-            temp_x = res.at("x");
-            temp_lam_x = res.at("lam_x");
-            temp_lam_g = res.at("lam_g");
-
-            DM result = res.at("x");
-            DM lam_x = res.at("lam_x");
+            optResult_x = res.at("x");
+            optResult_lam_x = res.at("lam_x");
+            optResult_lam_g = res.at("lam_g");
 
             /** Output ============================================================================================= **/
             /* Get found parameter values and sensitivities from optimization result and write to paramList */
-            DM new_params = result(Slice(result.size1() - varp.size1(), result.size1()));
-            DM param_sens = lam_x(Slice(lam_x.size1() - varp.size1(), lam_x.size1()));
+            DM new_params = optResult_x(Slice(optResult_x.size1() - varp.size1(), optResult_x.size1()));
+            DM param_sens = optResult_lam_x(Slice(optResult_lam_x.size1() - varp.size1(), optResult_lam_x.size1()));
 
             for (auto &param : paramList) {
                 param.foundValue = static_cast<double>(new_params(param.id));
@@ -957,7 +1051,7 @@ int main() {
             }
 
             /* Time-reverse trajectory from optimization result, reshape, reverse time */
-            DM est_traj_rev_vect = result(Slice(0, varx.size1()));
+            DM est_traj_rev_vect = optResult_x(Slice(0, varx.size1()));
             DM est_traj_rev_woTime = DM::reshape(est_traj_rev_vect, dimx, DATA_POINTS);
             DM est_traj_woTime = flipDM(est_traj_rev_woTime, 2);
 
@@ -979,6 +1073,9 @@ int main() {
             /** Visualize new parameters within their bounds and write to paramInfo file **/
             std::string paramInfo_filepath = kite_params_out_dir + afterItStr + "_paramInfo.txt";
             printWrite_parametersFound(paramList, fitting_error_evaluated, paramInfo_filepath);
+
+            /** Write optimization results to file for possible warm start **/
+            write_optResultsFile(optResult_x, optResult_lam_x, optResult_lam_g, optResults0_filepath);
 
         } /** End of ident iteration loop -------------------------------------------------------------------------- **/
 
