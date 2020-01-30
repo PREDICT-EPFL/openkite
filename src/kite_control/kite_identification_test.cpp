@@ -589,6 +589,7 @@ void printWrite_parametersFound(std::list<Parameter> &paramList, const double &f
     std::ofstream param_diag_file(filepath, std::ios::out);
 
     param_diag_file << "ParamId" << " "
+                    << "GroupName" << " "
                     << "ParamName" << " "
                     << "ParamValue" << " "
                     << "LwBound" << " "
@@ -602,6 +603,7 @@ void printWrite_parametersFound(std::list<Parameter> &paramList, const double &f
         param_diag_file << std::fixed << std::setprecision(15);
 
         param_diag_file << i << " "
+                        << param.groupName << " "
                         << param.name << " "
                         << param.foundValue << " "
                         << param.lowerBound << " "
@@ -626,21 +628,21 @@ int main() {
     const int dimu = 4;   // T elev rud ail
 
     /// 1. Identification mode ///
-    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LATERAL;
+    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LONGITUDINAL;
 
     /// 2. lon: 10, lat: 11 identification parameters ///
-    const int dimp = 11;
+    const int dimp = 10;
 
     /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
     // pitch / longitudinal
-//    const int DATA_POINTS = 346;
-//    const int poly_order = 3;
-//    const int num_segments = 115;
+    const int DATA_POINTS = 346;
+    const int poly_order = 3;
+    const int num_segments = 115;
 
     // roll / lateral
-    const int DATA_POINTS = 325;;
-    const int poly_order = 3;
-    const int num_segments = 108;
+//    const int DATA_POINTS = 325;;
+//    const int poly_order = 3;
+//    const int num_segments = 108;
 
     //OptProblemProperties opp(13, 4, 10, 346, 3, 115);
     //OptProblemProperties opp(dimx, dimu, dimp, DATA_POINTS, poly_order, num_segments);
@@ -775,6 +777,7 @@ int main() {
         /* Get KiteDynamics based on constant (during optimization) parameters.
          * Parameters to be optimized parameters are read in for each iteration. */
         std::string kite_params_in_filepath = kite_baseParams_dir + kite_baseParams_filename + ".yaml";
+        std::cout << "Base params: " << kite_params_in_filepath << "\n";
 
         KiteDynamics kite, kite_int;
         get_kiteDynamics(kite_params_in_filepath, windFrom_deg, windSpeed, identMode,
