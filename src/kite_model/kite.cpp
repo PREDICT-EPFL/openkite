@@ -15,7 +15,7 @@ namespace kite_utils {
         /** --------------------- **/
         /** Geometric parameters  **/
         /** --------------------- **/
-        props.Geometry.imuPitchOffset_deg =  config["geom"]["p_offs_d"].as<double>();
+        props.Geometry.imuPitchOffset_deg = config["geom"]["p_offs_d"].as<double>();
 
         props.Geometry.wingSpan = config["geom"]["b"].as<double>();
         props.Geometry.mac = config["geom"]["c"].as<double>();
@@ -245,23 +245,24 @@ void KiteDynamics::getModel(P &g, P &rho,
 
     SX vA = v - vW_b;         /** Apparent velocity in body frame **/
     SX Va = SX::norm_2(vA);     /** Apparent speed **/
-    SX Va2 = SX::dot(vA, vA);   /** Apparent speed **/
 
     SX ss = asin(vA(1) / (Va + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
     //SX aoa = atan2(vA(2), (vA(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX aoa = atan(vA(2) / (vA(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
-    SX dyn_press = 0.5 * rho * Va2;         /** dynamic pressure **/
+    SX dyn_press = 0.5 * rho * Va * Va;         /** dynamic pressure **/
 
-    SX CD = CD0 + pow(CL0 + CLa * aoa, 2) / (pi * e_o * AR); /** total drag coefficient **/
+    SX CL = (CL0 + CLa * aoa + CLq * c / (2 * Va) * w(1) + CLde * dE);
 
 /** ------------------------- **/
-/** Dynamic Equations: Forces */
+/** Dynamic Equations: Forces **/
 /** ------------------------- **/
-    SX LIFT = (CL0 + CLa * aoa) * dyn_press * S +
-              (0.25 * CLq * c * S * rho) * Va * w(1);
-    SX DRAG = CD * dyn_press * S;
-    SX SF = (CYb * ss + CYdr * dR) * dyn_press * S +
-            0.25 * (CYr * w(2) + CYp * w(0)) * (b * rho * S) * Va;
+    SX LIFT = dyn_press * S * CL;
+
+    SX DRAG = dyn_press * S * (CD0 + CL * CL / (pi * e_o * AR));
+
+    SX SF = dyn_press * S * (CYb * ss +
+                             b / (2 * Va) * (CYp * w(0) + CYr * w(2)) +
+                             CYdr * dR);
 
 /** Compute transformation between WRF and BRF: qw_b **/
 /** qw_b = q(aoa) * q(-ss);                           **/
@@ -291,14 +292,10 @@ void KiteDynamics::getModel(P &g, P &rho,
     SX g_b = qG_q(Slice(1, 4), 0);
 
 /** Propulsion force in BRF */
-// const double p1 = -0.007752958684034;
-// const double p2 = -0.137115918638887;
-// const double p3 = 9.327531598002182;
-// normalize to get 0...1
+    /* T scales the maximal (static) thrust */
     const double p1 = -0.00083119;
     const double p2 = -0.014700129;
-    T_b = SX::vertcat({T * (p1 * Va2 + p2 * Va + 1.0), 0, 0});
-//SX T_b = SX::vertcat({T, 0, 0});
+    T_b = SX::vertcat({T * (p1 * Va * Va + p2 * Va + 1.0), 0, 0});
 
 /** Tether force */
 //    /** value: using smooth ramp approximation */
@@ -329,16 +326,20 @@ void KiteDynamics::getModel(P &g, P &rho,
 /** Dynamic Equation: Moments */
 /** ------------------------- */
 /** Rolling Aerodynamic Moment */
-    SX L = (Cl0 + Clb * ss + Cldr * dR + Clda * dA) * dyn_press * S * b +
-           (Clr * w(2) + Clp * w(0)) * (0.25 * rho * std::pow(b, 2) * S) * Va;
+    SX L = dyn_press * S * b * (Cl0 + Clb * ss +
+                                b / (2 * Va) * (Clp * w(0) + Clr * w(2)) +
+                                Clda * dA + Cldr * dR);
 
 /** Pitching Aerodynamic Moment */
-    SX M = (Cm0 + Cma * aoa + Cmde * dE) * dyn_press * S * c +
-           Cmq * (0.25 * S * std::pow(c, 2) * rho) * w(1) * Va;
+    SX M = dyn_press * S * c * (Cm0 + Cma * aoa +
+                                c / (2 * Va) * Cmq +
+                                Cmde * dE);
 
 /** Yawing Aerodynamic Moment */
-    SX N = (Cn0 + Cnb * ss + Cndr * dR + Cnda * dA) * dyn_press * S * b +
-           (Cnp * w(0) + Cnr * w(2)) * (0.25 * S * std::pow(b, 2) * rho) * Va;
+
+    SX N = dyn_press * S * b * (Cn0 + Cnb * ss +
+                                b / (2 * Va) * (Cnp * w(0) + Cnr * w(2)) +
+                                Cnda * dA + Cndr * dR);
 
 /** Aircraft Inertia Matrix */
     SXVector j_vec{Ixx, Iyy, Izz};
@@ -616,7 +617,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     /** --------------------- **/
     /** Geometric parameters  **/
     /** --------------------- **/
-    double imuPitchOffset_deg = kiteProps.Geometry.imuPitchOffset_deg;
 
     double b = kiteProps.Geometry.wingSpan;
     double c = kiteProps.Geometry.mac;
@@ -920,6 +920,161 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                                      T, dE, dR, dA,
                                      v_dot, w_dot, r_dot, q_dot,
                                      Faero_b, T_b);
+
+    } else if (identMode == COMPLETE) {
+        /** COMPLETE IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
+
+        /** --------------------- **/
+        /** Geometric parameters  **/
+        /** --------------------- **/
+        SX imuPitchOffset_deg = SX::sym("imuPitchOffset_deg");
+
+        /** ------------------------------- **/
+        /** Aerodynamic parameters          **/
+        /** ------------------------------- **/
+        double e_o = kiteProps.Aerodynamics.e_oswald;
+        SX CD0 = SX::sym("CD0");
+
+        /* AOA */
+        SX CL0 = SX::sym("CL0");
+        SX CLa = SX::sym("CLa");
+
+        SX Cm0 = SX::sym("Cm0");
+        SX Cma = SX::sym("Cma");
+
+        /* Sideslip */
+        SX CYb = SX::sym("CYb");
+
+        double Cl0 = kiteProps.Aerodynamics.Cl0;
+        SX Clb = SX::sym("Clb");
+
+        double Cn0 = kiteProps.Aerodynamics.Cn0;
+        SX Cnb = SX::sym("Cnb");
+
+
+        /* Pitchrate */
+        SX CLq = SX::sym("CLq");
+        SX Cmq = SX::sym("Cmq");
+
+        /* Rollrate */
+        SX CYp = SX::sym("CYp");
+        SX Clp = SX::sym("Clp");
+        SX Cnp = SX::sym("Cnp");
+
+        /* Yawrate */
+        SX CYr = SX::sym("CYr");
+        SX Clr = SX::sym("Clr");
+        SX Cnr = SX::sym("Cnr");
+
+
+        /** ------------------------------ **/
+        /** Aerodynamic effects of control **/
+        /** ------------------------------ **/
+        /* Elevator */
+        SX CLde = SX::sym("CLde");
+        SX Cmde = SX::sym("Cmde");
+
+        /* Ailerons */
+        SX Clda = SX::sym("Clda");
+        SX Cnda = SX::sym("Cnda");
+
+        /* Rudder */
+        double CYdr = kiteProps.Aerodynamics.CYdr;
+        double Cldr = kiteProps.Aerodynamics.Cldr;
+        double Cndr = kiteProps.Aerodynamics.Cndr;
+
+        params = SX::vertcat({imuPitchOffset_deg,
+
+                              CD0,
+
+                              CL0,
+                              CLa,
+
+                              Cm0,
+                              Cma,
+
+
+                              CYb,
+
+                              Clb,
+
+                              Cnb,
+
+
+                              CLq,
+                              Cmq,
+
+                              CYp,
+                              Clp,
+                              Cnp,
+
+                              CYr,
+                              Clr,
+                              Cnr,
+
+
+                              CLde,
+                              Cmde,
+
+                              Clda,
+                              Cnda
+                             }); // 10 longitudinal parameters
+
+        /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
+        getModel<double, SX, SX>(g, rho,
+                                 windFrom_deg, windSpeed,
+                                 b, c, AR, S,
+                                 Mass, Ixx, Iyy, Izz, Ixz,
+
+                                 imuPitchOffset_deg,
+
+
+                                 e_o,
+                                 CD0,
+
+
+                                 CL0,
+                                 CLa,
+
+                                 Cm0,
+                                 Cma,
+
+
+                                 CYb,
+
+                                 Cl0,
+                                 Clb,
+
+                                 Cn0,
+                                 Cnb,
+
+
+                                 CLq,
+                                 Cmq,
+
+                                 CYp,
+                                 Clp,
+                                 Cnp,
+
+                                 CYr,
+                                 Clr,
+                                 Cnr,
+
+
+                                 CLde,
+                                 Cmde,
+
+                                 Clda,
+                                 Cnda,
+
+                                 CYdr,
+                                 Cldr,
+                                 Cndr,
+
+                                 v, w, r, q,
+                                 T, dE, dR, dA,
+                                 v_dot, w_dot, r_dot, q_dot,
+                                 Faero_b, T_b);
     }
 
 //    /** ------------------------------ **/

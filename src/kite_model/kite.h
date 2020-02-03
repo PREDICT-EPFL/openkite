@@ -329,8 +329,9 @@ class KiteDynamics {
 public:
 
     enum IdentMode {
-        LONGITUDINAL = 1,
-        LATERAL = 2
+        LONGITUDINAL,
+        LATERAL,
+        COMPLETE
     };
 
     //constructor
