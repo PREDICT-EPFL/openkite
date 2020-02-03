@@ -15,8 +15,6 @@ namespace kite_utils {
         /** --------------------- **/
         /** Geometric parameters  **/
         /** --------------------- **/
-        props.Geometry.imuPitchOffset_deg = config["geom"]["p_offs_d"].as<double>();
-
         props.Geometry.wingSpan = config["geom"]["b"].as<double>();
         props.Geometry.mac = config["geom"]["c"].as<double>();
         props.Geometry.aspectRatio = config["geom"]["AR"].as<double>();
@@ -27,6 +25,7 @@ namespace kite_utils {
         //props.Geometry.FinSurfaceArea = config["geometry"]["Sf"].as<double>();
         //props.Geometry.FinLeverArm = config["geometry"]["lf"].as<double>();
         //props.Geometry.AerodynamicCenter = config["geometry"]["Xac"].as<double>();
+        props.Geometry.wingSettingAngle = config["geom"]["set_ang"].as<double>();
 
         /** --------------------------- **/
         /** Mass and inertia parameters **/
@@ -153,11 +152,8 @@ namespace kite_utils {
 template<typename P, typename LO, typename LA>
 void KiteDynamics::getModel(P &g, P &rho,
                             P &windFrom_deg, P &windSpeed,
-                            P &b, P &c, P &AR, P &S,
+                            P &b, P &c, P &AR, P &S, P &wingSettingAngle,
                             P &Mass, P &Ixx, P &Iyy, P &Izz, P &Ixz,
-
-                            LO &imuPitchOffset_deg,
-
 
                             P &e_o,
                             LO &CD0,
@@ -232,15 +228,15 @@ void KiteDynamics::getModel(P &g, P &rho,
     SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
     vW = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
 
-    SX q_imu = SX::vertcat({cos(-imuPitchOffset_deg * M_PI / 180.0 / 2.0),
-                            0.0,
-                            sin(-imuPitchOffset_deg * M_PI / 180.0 / 2.0),
-                            0.0}); /** IMU to body **/
-    SX q_corrected = kmath::quat_multiply(q,
-                                          q_imu); /** Rotation from NED to body frame, corrected by IMU pitch offset **/
+//    SX q_imu = SX::vertcat({cos(-imuPitchOffset_deg * M_PI / 180.0 / 2.0),
+//                            0.0,
+//                            sin(-imuPitchOffset_deg * M_PI / 180.0 / 2.0),
+//                            0.0}); /** IMU to body **/
+//    SX q_corrected = kmath::quat_multiply(q,
+//                                          q_imu); /** Rotation from NED to body frame, corrected by IMU pitch offset **/
 
     SX qvW = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, vW}));
-    SX qvW_q = kmath::quat_multiply(qvW, q_corrected);
+    SX qvW_q = kmath::quat_multiply(qvW, q);
     SX vW_b = qvW_q(Slice(1, 4), 0);            /** Wind velocity in body frame **/
 
     SX vA = v - vW_b;         /** Apparent velocity in body frame **/
@@ -251,7 +247,7 @@ void KiteDynamics::getModel(P &g, P &rho,
     SX aoa = atan(vA(2) / (vA(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX dyn_press = 0.5 * rho * Va * Va;         /** dynamic pressure **/
 
-    SX CL = (CL0 + CLa * aoa + CLq * c / (2 * Va) * w(1) + CLde * dE);
+    SX CL = (CL0 + CLa * (aoa + wingSettingAngle) + CLq * c / (2 * Va) * w(1) + CLde * dE);
 
 /** ------------------------- **/
 /** Dynamic Equations: Forces **/
@@ -288,7 +284,7 @@ void KiteDynamics::getModel(P &g, P &rho,
 /** Gravitational acceleration in BRF */
     SX qG = kmath::quat_multiply(kmath::quat_inverse(q),
                                  SX::vertcat({0, 0, 0, g}));
-    SX qG_q = kmath::quat_multiply(qG, q_corrected);
+    SX qG_q = kmath::quat_multiply(qG, q);
     SX g_b = qG_q(Slice(1, 4), 0);
 
 /** Propulsion force in BRF */
@@ -331,7 +327,7 @@ void KiteDynamics::getModel(P &g, P &rho,
                                 Clda * dA + Cldr * dR);
 
 /** Pitching Aerodynamic Moment */
-    SX M = dyn_press * S * c * (Cm0 + Cma * aoa +
+    SX M = dyn_press * S * c * (Cm0 + Cma * (aoa + wingSettingAngle) +
                                 c / (2 * Va) * Cmq +
                                 Cmde * dE);
 
@@ -376,7 +372,7 @@ void KiteDynamics::getModel(P &g, P &rho,
 /** Aircraft attitude wrt IRF  */
     double lambda = -5;
     q_dot = 0.5 * kmath::quat_multiply(q, SX::vertcat({0, w})) +
-            0.5 * lambda * q_corrected * (SX::dot(q_corrected, q_corrected) - 1);
+            0.5 * lambda * q * (SX::dot(q, q) - 1);
 
 /** End of dynamics model **/
 /** ============================================================================================================ **/
@@ -397,8 +393,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     /** --------------------- **/
     /** Geometric parameters  **/
     /** --------------------- **/
-    double imuPitchOffset_deg = kiteProps.Geometry.imuPitchOffset_deg;
-
     double b = kiteProps.Geometry.wingSpan;
     double c = kiteProps.Geometry.mac;
     double AR = kiteProps.Geometry.aspectRatio;
@@ -413,6 +407,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     //double Xcg = 0.031/c;               /** Center of Gravity (CoG) wrt leading edge [1/c] **/
     //double Vf = (Sf * lf) / (S * b);    /** fin volume coefficient []                      **/
     //double Vh = (lt * St) / (S * c);    /** horizontal tail volume coefficient []          **/
+    double wingSettingAngle = kiteProps.Geometry.wingSettingAngle;
 
     /** --------------------------- **/
     /** Mass and inertia parameters **/
@@ -498,11 +493,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
     getModel<double, double, double>(g, rho,
                                      windFrom_deg, windSpeed,
-                                     b, c, AR, S,
+                                     b, c, AR, S, wingSettingAngle,
                                      Mass, Ixx, Iyy, Izz, Ixz,
-
-                                     imuPitchOffset_deg,
-
 
                                      e_o,
                                      CD0,
@@ -617,7 +609,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     /** --------------------- **/
     /** Geometric parameters  **/
     /** --------------------- **/
-
     double b = kiteProps.Geometry.wingSpan;
     double c = kiteProps.Geometry.mac;
     double AR = kiteProps.Geometry.aspectRatio;
@@ -632,6 +623,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     //double Xcg = 0.031/c;               /** Center of Gravity (CoG) wrt leading edge [1/c] **/
     //double Vf = (Sf * lf) / (S * b);    /** fin volume coefficient []                      **/
     //double Vh = (lt * St) / (S * c);    /** horizontal tail volume coefficient []          **/
+    double wingSettingAngle = kiteProps.Geometry.wingSettingAngle;
 
     /** --------------------------- **/
     /** Mass and inertia parameters **/
@@ -651,11 +643,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
     if (identMode == LONGITUDINAL) {
         /** LONGITUDINAL IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
-
-        /** --------------------- **/
-        /** Geometric parameters  **/
-        /** --------------------- **/
-        SX imuPitchOffset_deg = SX::sym("imuPitchOffset_deg");
 
         /** ------------------------------- **/
         /** Aerodynamic parameters          **/
@@ -711,9 +698,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         double Cldr = kiteProps.Aerodynamics.Cldr;
         double Cndr = kiteProps.Aerodynamics.Cndr;
 
-        params = SX::vertcat({imuPitchOffset_deg,
-
-                              CD0,
+        params = SX::vertcat({CD0,
 
                               CL0,
                               CLa,
@@ -726,16 +711,13 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
                               CLde,
                               Cmde
-                             }); // 10 longitudinal parameters
+                             }); // 9 longitudinal parameters
 
         /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
         getModel<double, SX, double>(g, rho,
                                      windFrom_deg, windSpeed,
-                                     b, c, AR, S,
+                                     b, c, AR, S, wingSettingAngle,
                                      Mass, Ixx, Iyy, Izz, Ixz,
-
-                                     imuPitchOffset_deg,
-
 
                                      e_o,
                                      CD0,
@@ -786,11 +768,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
     } else if (identMode == LATERAL) {
         /** LATERAL IDENTIFICATION PARAMETERS ----------------------------------------------------------------------- */
-
-        /** --------------------- **/
-        /** Geometric parameters  **/
-        /** --------------------- **/
-        double imuPitchOffset_deg = kiteProps.Geometry.imuPitchOffset_deg;
 
         /** ------------------------------- **/
         /** Aerodynamic parameters          **/
@@ -868,11 +845,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
         getModel<double, double, SX>(g, rho,
                                      windFrom_deg, windSpeed,
-                                     b, c, AR, S,
+                                     b, c, AR, S, wingSettingAngle,
                                      Mass, Ixx, Iyy, Izz, Ixz,
-
-                                     imuPitchOffset_deg,
-
 
                                      e_o,
                                      CD0,
@@ -923,11 +897,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
     } else if (identMode == COMPLETE) {
         /** COMPLETE IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
-
-        /** --------------------- **/
-        /** Geometric parameters  **/
-        /** --------------------- **/
-        SX imuPitchOffset_deg = SX::sym("imuPitchOffset_deg");
 
         /** ------------------------------- **/
         /** Aerodynamic parameters          **/
@@ -983,9 +952,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         double Cldr = kiteProps.Aerodynamics.Cldr;
         double Cndr = kiteProps.Aerodynamics.Cndr;
 
-        params = SX::vertcat({imuPitchOffset_deg,
-
-                              CD0,
+        params = SX::vertcat({CD0,
 
                               CL0,
                               CLa,
@@ -1018,16 +985,13 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
                               Clda,
                               Cnda
-                             }); // 10 longitudinal parameters
+                             }); // X parameters
 
         /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
         getModel<double, SX, SX>(g, rho,
                                  windFrom_deg, windSpeed,
-                                 b, c, AR, S,
+                                 b, c, AR, S, wingSettingAngle,
                                  Mass, Ixx, Iyy, Izz, Ixz,
-
-                                 imuPitchOffset_deg,
-
 
                                  e_o,
                                  CD0,

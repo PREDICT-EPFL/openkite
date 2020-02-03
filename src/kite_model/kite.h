@@ -26,6 +26,7 @@ struct PlaneGeometry {
 //    double FinSurfaceArea;
 //    double FinLeverArm;
 //    double AerodynamicCenter;
+    double wingSettingAngle;
 };
 
 struct PlaneInertia {
@@ -369,11 +370,8 @@ public:
     template<typename P, typename LO, typename LA>
     void getModel(P &g, P &rho,
                   P &windFrom_deg, P &windSpeed,
-                  P &b, P &c, P &AR, P &S,
+                  P &b, P &c, P &AR, P &S, P &wingSettingAngle,
                   P &Mass, P &Ixx, P &Iyy, P &Izz, P &Ixz,
-
-                  LO &imuPitchOffset_deg,
-
 
                   P &e_o,
                   LO &CD0,
