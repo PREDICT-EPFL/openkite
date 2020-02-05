@@ -378,7 +378,7 @@ void get_kiteDynamics(const std::string &filepath, const double windFrom_deg, co
     algo_props.Integrator = CVODES;
     algo_props.sampling_time = 0.02;
 
-    kite = KiteDynamics(kite_props, algo_props, controlsIncludeWind, identMode);
+    kite = KiteDynamics(kite_props, algo_props, identMode, controlsIncludeWind);
     kite_int = KiteDynamics(kite_props, algo_props, controlsIncludeWind); //integration model
 }
 
@@ -783,21 +783,21 @@ int main() {
     const int dimu = 6;   // T elev rud ail + windFrom_deg windSpeed
 
     /// 1. Identification mode ///
-    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LATERAL;
+    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LONGITUDINAL;
 
     /// 2. lon: 9, lat: 11, complete: 21 identification parameters ///
-    const int dimp = 11;
+    const int dimp = 9;
 
     /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
     // pitch / longitudinal
-//    const int DATA_POINTS = 106;
-//    const int poly_order = 3;
-//    const int num_segments = 35;
+    const int DATA_POINTS = 106;
+    const int poly_order = 3;
+    const int num_segments = 35;
 
     // roll / lateral
-    const int DATA_POINTS = 85;
-    const int poly_order = 3;
-    const int num_segments = 28;
+//    const int DATA_POINTS = 85;
+//    const int poly_order = 3;
+//    const int num_segments = 28;
 
     //OptProblemProperties opp(13, 4, 10, 346, 3, 115);
     //OptProblemProperties opp(dimx, dimu, dimp, DATA_POINTS, poly_order, num_segments);

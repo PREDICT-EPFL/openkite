@@ -336,10 +336,11 @@ public:
     };
 
     //constructor
-    KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const bool controlsIncludeWind);
+    KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
+                 const bool controlsIncludeWind = false);
 
-    KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const bool controlsIncludeWind,
-            const IdentMode &identMode);
+    KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const IdentMode &identMode,
+                 const bool controlsIncludeWind = false);
 
     KiteDynamics() = default;
 

@@ -597,8 +597,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 }
 
 KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmProperties &AlgoProps,
-                           const bool controlsIncludeWind,
-                           const IdentMode &identMode) {
+                           const IdentMode &identMode, const bool controlsIncludeWind) {
 
     /** enviromental constants */
     double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
