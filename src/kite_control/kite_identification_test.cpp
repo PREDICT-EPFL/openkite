@@ -333,34 +333,34 @@ void get_costMatrix(const KiteDynamics::IdentMode identMode,
 
                     DM &Q) {
 
+    /* Default */
+    Q = SX::diag(SX({100, 100, 100,   // vx vy vz
+                     200, 200, 200,   // wx wy wz
+                     10, 10, 10,       // x y z
+                     100, 100, 100, 100})); //qw qx qy qz
+
     if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
-
-//        Q = SX::diag(SX({100, 10, 100,   // vx vy vz
-//                         10, 100, 10,   // wx wy wz
-//                         10, 10, 100,   // x y z
-//                         100, 10, 100, 10}));   //qw qx qy qz
-
-        Q = SX::diag(SX({100, 100, 100,   // vx vy vz
-                         200, 200, 200,   // wx wy wz
-                         10, 10, 10,   // x y z
-                         100, 100, 100, 100}));   //qw qx qy qz
-
-    } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
 
 //        Q = SX::diag(SX({100, 100, 100,   // vx vy vz
 //                         200, 200, 200,   // wx wy wz
-//                         10, 10, 10,       // x y z
+//                         10, 10, 10,   // x y z
+//                         100, 100, 100, 100}));   //qw qx qy qz
+
+    } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
+
+//        Q = SX::diag(SX({0, 100, 0,   // vx vy vz
+//                         200, 0, 200,   // wx wy wz
+//                         50, 50, 0,   // x y z
 //                         100, 100, 100, 100})); //qw qx qy qz
 
-        Q = SX::diag(SX({0, 100, 0,   // vx vy vz
-                         200, 0, 200,   // wx wy wz
-                         50, 50, 0,   // x y z
-                         100, 100, 100, 100})); //qw qx qy qz
+    } else if (identMode == KiteDynamics::IdentMode::YAW) {
+
+        /* Use default */
+
 
     } else {
 
         Q = SX::diag(SX::ones(13) * 100);
-
     }
 
 }
@@ -410,30 +410,32 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
 
     if (identMode == KiteDynamics::LONGITUDINAL) {
 
-        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -0.2, 0.2);
+        double relBound = 0.5;
+
+        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -relBound, relBound);
 
         /* AOA */
-        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -0.2, 0.2);
-        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -0.2, 0.2);
+        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
+        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
 
-        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.2, 0.2);
-        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -0.2, 0.2);
+        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -relBound, relBound);
+        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
 
 
         /* Pitchrate */
-        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -0.2, 0.2);
-        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -0.2, 0.2);
+        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -relBound, relBound);
+        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -relBound, relBound);
 
 
         /* Elevator */
-        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -0.2, 0.2);
-        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -0.2, 0.2);
+        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -relBound, relBound);
         // 9 longitudinal parameters
 
     } else if (identMode == KiteDynamics::LATERAL) {
 
         double relBound = 0.5;
-        
+
         /* Sideslip */
         paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
 
@@ -456,14 +458,44 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
         /* Ailerons */
         paramList.emplace_back("aero_ctrl_ail", "Clda", kiteProps.Aerodynamics.Clda, -relBound, relBound);
         paramList.emplace_back("aero_ctrl_ail", "Cnda", kiteProps.Aerodynamics.Cnda, -relBound, relBound);
-        // 11 lateral parameters
+        // 11 lateral/aileron parameters
 
 //        /* Rudder */
 //        paramList.emplace_back(11, "aero_ctrl_rud", "CYdr", kiteProps.Aerodynamics.CYdr, -relBound, relBound);
 //        paramList.emplace_back(12, "aero_ctrl_rud", "Cldr", kiteProps.Aerodynamics.Cldr, -relBound, relBound);
 //        paramList.emplace_back(13, "aero_ctrl_rud", "Cndr", kiteProps.Aerodynamics.Cndr, -relBound, relBound);
 
+    } else if (identMode == KiteDynamics::YAW) {
+
+        double relBound = 0.5;
+
+        /* Sideslip */
+        paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
+
+        paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb, -relBound, relBound);
+
+        paramList.emplace_back("aero_ss", "Cnb", kiteProps.Aerodynamics.Cnb, -relBound, relBound);
+
+
+        /* Rollrate */
+        paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -relBound, relBound);
+        paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -relBound, relBound);
+        paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -relBound, relBound);
+
+        /* Yawrate */
+        paramList.emplace_back("aero_rate_yaw", "CYr", kiteProps.Aerodynamics.CYr, -relBound, relBound);
+        paramList.emplace_back("aero_rate_yaw", "Clr", kiteProps.Aerodynamics.Clr, -relBound, relBound);
+        paramList.emplace_back("aero_rate_yaw", "Cnr", kiteProps.Aerodynamics.Cnr, -relBound, relBound);
+
+
+        /* Rudder */
+        paramList.emplace_back("aero_ctrl_rud", "CYdr", kiteProps.Aerodynamics.CYdr, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_rud", "Cldr", kiteProps.Aerodynamics.Cldr, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_rud", "Cndr", kiteProps.Aerodynamics.Cndr, -relBound, relBound);
+        // 12 lateral/rudder parameters
+
     }
+
 //    else if (identMode == KiteDynamics::COMPLETE) {
 //
 //        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -0.5, 0.7);
@@ -783,21 +815,26 @@ int main() {
     const int dimu = 6;   // T elev rud ail + windFrom_deg windSpeed
 
     /// 1. Identification mode ///
-    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LONGITUDINAL;
+    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LATERAL;
 
-    /// 2. lon: 9, lat: 11, complete: 21 identification parameters ///
-    const int dimp = 9;
+    /// 2. lon: 9, lat: 11, yaw: 12, complete: 21 identification parameters ///
+    const int dimp = 11;
 
     /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
     // pitch / longitudinal
-    const int DATA_POINTS = 106;
-    const int poly_order = 3;
-    const int num_segments = 35;
+//    const int DATA_POINTS = 106;
+//    const int poly_order = 3;
+//    const int num_segments = 35;
 
     // roll / lateral
-//    const int DATA_POINTS = 85;
+    const int DATA_POINTS = 85;
+    const int poly_order = 3;
+    const int num_segments = 28;
+
+//    // yaw
+//    const int DATA_POINTS = 64;
 //    const int poly_order = 3;
-//    const int num_segments = 28;
+//    const int num_segments = 21;
 
     //OptProblemProperties opp(13, 4, 10, 346, 3, 115);
     //OptProblemProperties opp(dimx, dimu, dimp, DATA_POINTS, poly_order, num_segments);
@@ -813,6 +850,8 @@ int main() {
             ||
             (identMode == KiteDynamics::IdentMode::LATERAL && dimp == 11 && DATA_POINTS == 85)
             ||
+            (identMode == KiteDynamics::IdentMode::YAW && dimp == 12 && DATA_POINTS == 64)
+            ||
             (identMode == KiteDynamics::IdentMode::COMPLETE && dimp == 21 && DATA_POINTS == 106)
 
 
@@ -826,6 +865,8 @@ int main() {
         identManeuver = "identPitch";
     } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
         identManeuver = "identRoll";
+    } else if (identMode == KiteDynamics::IdentMode::YAW) {
+        identManeuver = "identYaw";
     }
 
     std::cout << "\nRunning " << identManeuver << " identification of " << dimp << " parameters with "

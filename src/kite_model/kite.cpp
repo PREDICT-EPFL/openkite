@@ -148,54 +148,54 @@ namespace kite_utils {
 }
 
 
-/* G: (General) Parameter, LO: Parameter lOngitudinal, LA: Parameter lAteral*/
-template<typename W, typename P, typename LO, typename LA>
-void KiteDynamics::getModel(P &g, P &rho,
+/* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
+template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
+void KiteDynamics::getModel(GEN &g, GEN &rho,
                             W &windFrom_deg, W &windSpeed,
-                            P &b, P &c, P &AR, P &S, P &wingSettingAngle,
-                            P &Mass, P &Ixx, P &Iyy, P &Izz, P &Ixz,
+                            GEN &b, GEN &c, GEN &AR, GEN &S, GEN &wingSettingAngle,
+                            GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
-                            P &e_o,
-                            LO &CD0,
-
-
-                            LO &CL0,
-                            LO &CLa,
-
-                            LO &Cm0,
-                            LO &Cma,
+                            GEN &e_o,
+                            DLO &CD0,
 
 
-                            LA &CYb,
+                            DLO &CL0,
+                            DLO &CLa,
 
-                            P &Cl0,
-                            LA &Clb,
-
-                            P &Cn0,
-                            LA &Cnb,
+                            DLO &Cm0,
+                            DLO &Cma,
 
 
-                            LO &CLq,
-                            LO &Cmq,
+                            DLA &CYb,
 
-                            LA &CYp,
-                            LA &Clp,
-                            LA &Cnp,
+                            GEN &Cl0,
+                            DLA &Clb,
 
-                            LA &CYr,
-                            LA &Clr,
-                            LA &Cnr,
+                            GEN &Cn0,
+                            DLA &Cnb,
 
 
-                            LO &CLde,
-                            LO &Cmde,
+                            DLO &CLq,
+                            DLO &Cmq,
 
-                            LA &Clda,
-                            LA &Cnda,
+                            DLA &CYp,
+                            DLA &Clp,
+                            DLA &Cnp,
 
-                            P &CYdr,
-                            P &Cldr,
-                            P &Cndr,
+                            DLA &CYr,
+                            DLA &Clr,
+                            DLA &Cnr,
+
+
+                            ELV &CLde,
+                            ELV &Cmde,
+
+                            AIL &Clda,
+                            AIL &Cnda,
+
+                            RUD &CYdr,
+                            RUD &Cldr,
+                            RUD &Cndr,
 
                             casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                             casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
@@ -227,13 +227,6 @@ void KiteDynamics::getModel(P &g, P &rho,
     SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
     vW = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
 
-    //    SX q_imu = SX::vertcat({cos(-imuPitchOffset_deg * M_PI / 180.0 / 2.0),
-    //                            0.0,
-    //                            sin(-imuPitchOffset_deg * M_PI / 180.0 / 2.0),
-    //                            0.0}); /** IMU to body **/
-    //    SX q_corrected = kmath::quat_multiply(q,
-    //                                          q_imu); /** Rotation from NED to body frame, corrected by IMU pitch offset **/
-
     SX qvW = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, vW}));
     SX qvW_q = kmath::quat_multiply(qvW, q);
     SX vW_b = qvW_q(Slice(1, 4), 0);            /** Wind velocity in body frame **/
@@ -242,11 +235,10 @@ void KiteDynamics::getModel(P &g, P &rho,
     SX Va = SX::norm_2(vA);     /** Apparent speed **/
 
     SX ss = asin(vA(1) / (Va + 1e-4));       /** side slip angle [rad] (v(3)/v(1)) // small angle assumption **/
-    //SX aoa = atan2(vA(2), (vA(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX aoa = atan(vA(2) / (vA(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX dyn_press = 0.5 * rho * Va * Va;         /** dynamic pressure **/
 
-    SX CL = (CL0 + CLa * (aoa + wingSettingAngle) + CLq * c / (2 * Va) * w(1) + CLde * dE);
+    SX CL = (CL0 + CLa * (aoa + wingSettingAngle) + CLq * c / (2.0 * Va) * w(1) + CLde * dE);
 
     /** ------------------------- **/
     /** Dynamic Equations: Forces **/
@@ -256,13 +248,13 @@ void KiteDynamics::getModel(P &g, P &rho,
     SX DRAG = dyn_press * S * (CD0 + CL * CL / (pi * e_o * AR));
 
     SX SF = dyn_press * S * (CYb * ss +
-                             b / (2 * Va) * (CYp * w(0) + CYr * w(2)) +
+                             b / (2.0 * Va) * (CYp * w(0) + CYr * w(2)) +
                              CYdr * dR);
 
     /** Compute transformation between WRF and BRF: qw_b **/
     /** qw_b = q(aoa) * q(-ss);                           **/
-    SX q_aoa = SX::vertcat({cos(aoa / 2), 0, sin(aoa / 2), 0});
-    SX q_ss = SX::vertcat({cos(-ss / 2), 0, 0, sin(-ss / 2)});
+    SX q_aoa = SX::vertcat({cos(aoa / 2.0), 0, sin(aoa / 2.0), 0});
+    SX q_ss = SX::vertcat({cos(-ss / 2.0), 0, 0, sin(-ss / 2.0)});
 
     SX qw_b = kmath::quat_multiply(q_aoa, q_ss);
     SX qw_b_inv = kmath::quat_inverse(qw_b);
@@ -322,18 +314,18 @@ void KiteDynamics::getModel(P &g, P &rho,
     /** ------------------------- */
     /** Rolling Aerodynamic Moment */
     SX L = dyn_press * S * b * (Cl0 + Clb * ss +
-                                b / (2 * Va) * (Clp * w(0) + Clr * w(2)) +
+                                b / (2.0 * Va) * (Clp * w(0) + Clr * w(2)) +
                                 Clda * dA + Cldr * dR);
 
     /** Pitching Aerodynamic Moment */
     SX M = dyn_press * S * c * (Cm0 + Cma * (aoa + wingSettingAngle) +
-                                c / (2 * Va) * Cmq +
+                                c / (2.0 * Va) * Cmq +
                                 Cmde * dE);
 
     /** Yawing Aerodynamic Moment */
 
     SX N = dyn_press * S * b * (Cn0 + Cnb * ss +
-                                b / (2 * Va) * (Cnp * w(0) + Cnr * w(2)) +
+                                b / (2.0 * Va) * (Cnp * w(0) + Cnr * w(2)) +
                                 Cnda * dA + Cndr * dR);
 
     /** Aircraft Inertia Matrix */
@@ -481,33 +473,35 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         SX windFrom_deg = SX::sym("windFrom_deg");
         SX windSpeed = SX::sym("windSpeed");
 
-        /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
-        getModel<SX, double, double, double>(g, rho,
-                                             windFrom_deg, windSpeed,
-                                             b, c, AR, S, wingSettingAngle,
-                                             Mass, Ixx, Iyy, Izz, Ixz,
+        /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
+         *        W,  GEN,   DLO,     DLA,   AIL,    ELV,    RUD*/
+        getModel<SX, double, double, double, double, double, double>(
+                g, rho,
+                windFrom_deg, windSpeed,
+                b, c, AR, S, wingSettingAngle,
+                Mass, Ixx, Iyy, Izz, Ixz,
 
-                                             e_o, CD0,
+                e_o, CD0,
 
-                                             CL0, CLa,
-                                             Cm0, Cma,
+                CL0, CLa,
+                Cm0, Cma,
 
-                                             CYb,
-                                             Cl0, Clb,
-                                             Cn0, Cnb,
+                CYb,
+                Cl0, Clb,
+                Cn0, Cnb,
 
-                                             CLq, Cmq,
-                                             CYp, Clp, Cnp,
-                                             CYr, Clr, Cnr,
+                CLq, Cmq,
+                CYp, Clp, Cnp,
+                CYr, Clr, Cnr,
 
-                                             CLde, Cmde,
-                                             Clda, Cnda,
-                                             CYdr, Cldr, Cndr,
+                CLde, Cmde,
+                Clda, Cnda,
+                CYdr, Cldr, Cndr,
 
-                                             v, w, r, q,
-                                             T, dE, dR, dA,
-                                             v_dot, w_dot, r_dot, q_dot,
-                                             Faero_b, T_b);
+                v, w, r, q,
+                T, dE, dR, dA,
+                v_dot, w_dot, r_dot, q_dot,
+                Faero_b, T_b);
 
         control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -515,33 +509,35 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         double windFrom_deg = kiteProps.Wind.WindFrom_deg;
         double windSpeed = kiteProps.Wind.WindSpeed;
 
-        /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
-        getModel<double, double, double, double>(g, rho,
-                                                 windFrom_deg, windSpeed,
-                                                 b, c, AR, S, wingSettingAngle,
-                                                 Mass, Ixx, Iyy, Izz, Ixz,
+        /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
+         *        W,     GEN,   DLO,     DLA,   AIL,    ELV,    RUD*/
+        getModel<double, double, double, double, double, double, double>(
+                g, rho,
+                windFrom_deg, windSpeed,
+                b, c, AR, S, wingSettingAngle,
+                Mass, Ixx, Iyy, Izz, Ixz,
 
-                                                 e_o, CD0,
+                e_o, CD0,
 
-                                                 CL0, CLa,
-                                                 Cm0, Cma,
+                CL0, CLa,
+                Cm0, Cma,
 
-                                                 CYb,
-                                                 Cl0, Clb,
-                                                 Cn0, Cnb,
+                CYb,
+                Cl0, Clb,
+                Cn0, Cnb,
 
-                                                 CLq, Cmq,
-                                                 CYp, Clp, Cnp,
-                                                 CYr, Clr, Cnr,
+                CLq, Cmq,
+                CYp, Clp, Cnp,
+                CYr, Clr, Cnr,
 
-                                                 CLde, Cmde,
-                                                 Clda, Cnda,
-                                                 CYdr, Cldr, Cndr,
+                CLde, Cmde,
+                Clda, Cnda,
+                CYdr, Cldr, Cndr,
 
-                                                 v, w, r, q,
-                                                 T, dE, dR, dA,
-                                                 v_dot, w_dot, r_dot, q_dot,
-                                                 Faero_b, T_b);
+                v, w, r, q,
+                T, dE, dR, dA,
+                v_dot, w_dot, r_dot, q_dot,
+                Faero_b, T_b);
 
         control = SX::vertcat({T, dE, dR, dA});
     }
@@ -705,33 +701,35 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             SX windFrom_deg = SX::sym("windFrom_deg");
             SX windSpeed = SX::sym("windSpeed");
 
-            /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
-            getModel<SX, double, SX, double>(g, rho,
-                                             windFrom_deg, windSpeed,
-                                             b, c, AR, S, wingSettingAngle,
-                                             Mass, Ixx, Iyy, Izz, Ixz,
+            /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
+             *        W, GEN,   DLO, DLA,   AIL,    ELV, RUD*/
+            getModel<SX, double, SX, double, double, SX, double>(
+                    g, rho,
+                    windFrom_deg, windSpeed,
+                    b, c, AR, S, wingSettingAngle,
+                    Mass, Ixx, Iyy, Izz, Ixz,
 
-                                             e_o, CD0,
+                    e_o, CD0,
 
-                                             CL0, CLa,
-                                             Cm0, Cma,
+                    CL0, CLa,
+                    Cm0, Cma,
 
-                                             CYb,
-                                             Cl0, Clb,
-                                             Cn0, Cnb,
+                    CYb,
+                    Cl0, Clb,
+                    Cn0, Cnb,
 
-                                             CLq, Cmq,
-                                             CYp, Clp, Cnp,
-                                             CYr, Clr, Cnr,
+                    CLq, Cmq,
+                    CYp, Clp, Cnp,
+                    CYr, Clr, Cnr,
 
-                                             CLde, Cmde,
-                                             Clda, Cnda,
-                                             CYdr, Cldr, Cndr,
+                    CLde, Cmde,
+                    Clda, Cnda,
+                    CYdr, Cldr, Cndr,
 
-                                             v, w, r, q,
-                                             T, dE, dR, dA,
-                                             v_dot, w_dot, r_dot, q_dot,
-                                             Faero_b, T_b);
+                    v, w, r, q,
+                    T, dE, dR, dA,
+                    v_dot, w_dot, r_dot, q_dot,
+                    Faero_b, T_b);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -739,33 +737,35 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             double windFrom_deg = kiteProps.Wind.WindFrom_deg;
             double windSpeed = kiteProps.Wind.WindSpeed;
 
-            /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
-            getModel<double, double, SX, double>(g, rho,
-                                                 windFrom_deg, windSpeed,
-                                                 b, c, AR, S, wingSettingAngle,
-                                                 Mass, Ixx, Iyy, Izz, Ixz,
+            /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
+             *        W, GEN,   DLO, DLA,   AIL,    ELV, RUD*/
+            getModel<double, double, SX, double, double, SX, double>(
+                    g, rho,
+                    windFrom_deg, windSpeed,
+                    b, c, AR, S, wingSettingAngle,
+                    Mass, Ixx, Iyy, Izz, Ixz,
 
-                                                 e_o, CD0,
+                    e_o, CD0,
 
-                                                 CL0, CLa,
-                                                 Cm0, Cma,
+                    CL0, CLa,
+                    Cm0, Cma,
 
-                                                 CYb,
-                                                 Cl0, Clb,
-                                                 Cn0, Cnb,
+                    CYb,
+                    Cl0, Clb,
+                    Cn0, Cnb,
 
-                                                 CLq, Cmq,
-                                                 CYp, Clp, Cnp,
-                                                 CYr, Clr, Cnr,
+                    CLq, Cmq,
+                    CYp, Clp, Cnp,
+                    CYr, Clr, Cnr,
 
-                                                 CLde, Cmde,
-                                                 Clda, Cnda,
-                                                 CYdr, Cldr, Cndr,
+                    CLde, Cmde,
+                    Clda, Cnda,
+                    CYdr, Cldr, Cndr,
 
-                                                 v, w, r, q,
-                                                 T, dE, dR, dA,
-                                                 v_dot, w_dot, r_dot, q_dot,
-                                                 Faero_b, T_b);
+                    v, w, r, q,
+                    T, dE, dR, dA,
+                    v_dot, w_dot, r_dot, q_dot,
+                    Faero_b, T_b);
 
             control = SX::vertcat({T, dE, dR, dA});
         }
@@ -850,33 +850,35 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             SX windFrom_deg = SX::sym("windFrom_deg");
             SX windSpeed = SX::sym("windSpeed");
 
-            /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
-            getModel<SX, double, double, SX>(g, rho,
-                                             windFrom_deg, windSpeed,
-                                             b, c, AR, S, wingSettingAngle,
-                                             Mass, Ixx, Iyy, Izz, Ixz,
+            /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
+             *        W, GEN,    DLO,   DLA, AIL, ELV,   RUD*/
+            getModel<SX, double, double, SX, SX, double, double>(
+                    g, rho,
+                    windFrom_deg, windSpeed,
+                    b, c, AR, S, wingSettingAngle,
+                    Mass, Ixx, Iyy, Izz, Ixz,
 
-                                             e_o, CD0,
+                    e_o, CD0,
 
-                                             CL0, CLa,
-                                             Cm0, Cma,
+                    CL0, CLa,
+                    Cm0, Cma,
 
-                                             CYb,
-                                             Cl0, Clb,
-                                             Cn0, Cnb,
+                    CYb,
+                    Cl0, Clb,
+                    Cn0, Cnb,
 
-                                             CLq, Cmq,
-                                             CYp, Clp, Cnp,
-                                             CYr, Clr, Cnr,
+                    CLq, Cmq,
+                    CYp, Clp, Cnp,
+                    CYr, Clr, Cnr,
 
-                                             CLde, Cmde,
-                                             Clda, Cnda,
-                                             CYdr, Cldr, Cndr,
+                    CLde, Cmde,
+                    Clda, Cnda,
+                    CYdr, Cldr, Cndr,
 
-                                             v, w, r, q,
-                                             T, dE, dR, dA,
-                                             v_dot, w_dot, r_dot, q_dot,
-                                             Faero_b, T_b);
+                    v, w, r, q,
+                    T, dE, dR, dA,
+                    v_dot, w_dot, r_dot, q_dot,
+                    Faero_b, T_b);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -884,37 +886,192 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             double windFrom_deg = kiteProps.Wind.WindFrom_deg;
             double windSpeed = kiteProps.Wind.WindSpeed;
 
-            /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
-            getModel<double, double, double, SX>(g, rho,
-                                                 windFrom_deg, windSpeed,
-                                                 b, c, AR, S, wingSettingAngle,
-                                                 Mass, Ixx, Iyy, Izz, Ixz,
+            /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
+             *        W,     GEN,    DLO,   DLA, AIL, ELV,   RUD*/
+            getModel<double, double, double, SX, SX, double, double>(
+                    g, rho,
+                    windFrom_deg, windSpeed,
+                    b, c, AR, S, wingSettingAngle,
+                    Mass, Ixx, Iyy, Izz, Ixz,
 
-                                                 e_o, CD0,
+                    e_o, CD0,
 
-                                                 CL0, CLa,
-                                                 Cm0, Cma,
+                    CL0, CLa,
+                    Cm0, Cma,
 
-                                                 CYb,
-                                                 Cl0, Clb,
-                                                 Cn0, Cnb,
+                    CYb,
+                    Cl0, Clb,
+                    Cn0, Cnb,
 
-                                                 CLq, Cmq,
-                                                 CYp, Clp, Cnp,
-                                                 CYr, Clr, Cnr,
+                    CLq, Cmq,
+                    CYp, Clp, Cnp,
+                    CYr, Clr, Cnr,
 
-                                                 CLde, Cmde,
-                                                 Clda, Cnda,
-                                                 CYdr, Cldr, Cndr,
+                    CLde, Cmde,
+                    Clda, Cnda,
+                    CYdr, Cldr, Cndr,
 
-                                                 v, w, r, q,
-                                                 T, dE, dR, dA,
-                                                 v_dot, w_dot, r_dot, q_dot,
-                                                 Faero_b, T_b);
+                    v, w, r, q,
+                    T, dE, dR, dA,
+                    v_dot, w_dot, r_dot, q_dot,
+                    Faero_b, T_b);
 
             control = SX::vertcat({T, dE, dR, dA});
         }
+    } else if (identMode == YAW) {
+        /** LATERAL IDENTIFICATION PARAMETERS ----------------------------------------------------------------------- */
+
+        /** ------------------------------- **/
+        /** Aerodynamic parameters          **/
+        /** ------------------------------- **/
+        double e_o = kiteProps.Aerodynamics.e_oswald;
+        double CD0 = kiteProps.Aerodynamics.CD0;
+
+        /* AOA */
+        double CL0 = kiteProps.Aerodynamics.CL0;
+        double CLa = kiteProps.Aerodynamics.CLa;
+
+        double Cm0 = kiteProps.Aerodynamics.Cm0;
+        double Cma = kiteProps.Aerodynamics.Cma;
+
+        /* Sideslip */
+        SX CYb = SX::sym("CYb");
+
+        double Cl0 = kiteProps.Aerodynamics.Cl0;
+        SX Clb = SX::sym("Clb");
+
+        double Cn0 = kiteProps.Aerodynamics.Cn0;
+        SX Cnb = SX::sym("Cnb");
+
+
+        /* Pitchrate */
+        double CLq = kiteProps.Aerodynamics.CLq;
+        double Cmq = kiteProps.Aerodynamics.Cmq;
+
+        /* Rollrate */
+        SX CYp = SX::sym("CYp");
+        SX Clp = SX::sym("Clp");
+        SX Cnp = SX::sym("Cnp");
+
+        /* Yawrate */
+        SX CYr = SX::sym("CYr");
+        SX Clr = SX::sym("Clr");
+        SX Cnr = SX::sym("Cnr");
+
+
+        /** ------------------------------ **/
+        /** Aerodynamic effects of control **/
+        /** ------------------------------ **/
+        /* Elevator */
+        double CLde = kiteProps.Aerodynamics.CLde;
+        double Cmde = kiteProps.Aerodynamics.Cmde;
+
+        /* Ailerons */
+        double Clda = kiteProps.Aerodynamics.Clda;
+        double Cnda = kiteProps.Aerodynamics.Cnda;
+
+        /* Rudder */
+        SX CYdr = SX::sym("CYdr");
+        SX Cldr = SX::sym("Cldr");
+        SX Cndr = SX::sym("Cndr");
+
+        params = SX::vertcat({params,
+                              CYb,
+
+                              Clb,
+
+                              Cnb,
+
+                              CYp,
+                              Clp,
+                              Cnp,
+
+                              CYr,
+                              Clr,
+                              Cnr,
+
+                              CYdr,
+                              Cldr,
+                              Cndr
+                             }); // 12 lateral parameters (Rudder control only)
+
+        if (controlsIncludeWind) {
+            SX windFrom_deg = SX::sym("windFrom_deg");
+            SX windSpeed = SX::sym("windSpeed");
+
+            /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
+             *        W, GEN,    DLO,   DLA, AIL,    ELV,   RUD*/
+            getModel<SX, double, double, SX, double, double, SX>(
+                    g, rho,
+                    windFrom_deg, windSpeed,
+                    b, c, AR, S, wingSettingAngle,
+                    Mass, Ixx, Iyy, Izz, Ixz,
+
+                    e_o, CD0,
+
+                    CL0, CLa,
+                    Cm0, Cma,
+
+                    CYb,
+                    Cl0, Clb,
+                    Cn0, Cnb,
+
+                    CLq, Cmq,
+                    CYp, Clp, Cnp,
+                    CYr, Clr, Cnr,
+
+                    CLde, Cmde,
+                    Clda, Cnda,
+                    CYdr, Cldr, Cndr,
+
+                    v, w, r, q,
+                    T, dE, dR, dA,
+                    v_dot, w_dot, r_dot, q_dot,
+                    Faero_b, T_b);
+
+            control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
+
+        } else {
+            double windFrom_deg = kiteProps.Wind.WindFrom_deg;
+            double windSpeed = kiteProps.Wind.WindSpeed;
+
+            /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
+             *        W,     GEN,    DLO,   DLA, AIL,    ELV,   RUD*/
+            getModel<double, double, double, SX, double, double, SX>(
+                    g, rho,
+                    windFrom_deg, windSpeed,
+                    b, c, AR, S, wingSettingAngle,
+                    Mass, Ixx, Iyy, Izz, Ixz,
+
+                    e_o, CD0,
+
+                    CL0, CLa,
+                    Cm0, Cma,
+
+                    CYb,
+                    Cl0, Clb,
+                    Cn0, Cnb,
+
+                    CLq, Cmq,
+                    CYp, Clp, Cnp,
+                    CYr, Clr, Cnr,
+
+                    CLde, Cmde,
+                    Clda, Cnda,
+                    CYdr, Cldr, Cndr,
+
+                    v, w, r, q,
+                    T, dE, dR, dA,
+                    v_dot, w_dot, r_dot, q_dot,
+                    Faero_b, T_b);
+
+
+            control = SX::vertcat({T, dE, dR, dA});
+        }
+
+
     }
+
 //    else if (identMode == COMPLETE) {
 //        /** COMPLETE IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
 //

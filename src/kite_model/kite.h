@@ -53,14 +53,14 @@ struct PlaneAerodynamics {
     double Cma;
 
 
-    /* Sideslip angle (beta) -> Side force (Y) */
+    /* SidesliGENangle (beta) -> Side force (Y) */
     double CYb;
 
-    /* Sideslip angle (beta) -> Rolling moment (l) */
+    /* SidesliGENangle (beta) -> Rolling moment (l) */
     double Cl0;
     double Clb;
 
-    /* Sideslip angle (beta) -> Yawing moment (n) */
+    /* SidesliGENangle (beta) -> Yawing moment (n) */
     double Cn0;
     double Cnb;
 
@@ -112,15 +112,15 @@ struct PlaneAerodynamics {
 //    } aoa;
 //
 //
-//    struct Sideslip {
-//        /* Sideslip angle (beta) -> Side force (Y) */
+//    struct SidesliGEN{
+//        /* SidesliGENangle (beta) -> Side force (Y) */
 //        double CYb;
 //
-//        /* Sideslip angle (beta) -> Rolling moment (l) */
+//        /* SidesliGENangle (beta) -> Rolling moment (l) */
 //        double Cl0;
 //        double Clb;
 //
-//        /* Sideslip angle (beta) -> Yawing moment (n) */
+//        /* SidesliGENangle (beta) -> Yawing moment (n) */
 //        double Cn0;
 //        double Cnb;
 //    } ss;
@@ -217,14 +217,14 @@ struct PlaneAerodynamics {
 //};
 //
 //struct PlaneAeroSs {
-//    /* Sideslip angle (beta) -> Side force (Y) */
+//    /* SidesliGENangle (beta) -> Side force (Y) */
 //    double CYb;
 //
-//    /* Sideslip angle (beta) -> Rolling moment (l) */
+//    /* SidesliGENangle (beta) -> Rolling moment (l) */
 //    double Cl0;
 //    double Clb;
 //
-//    /* Sideslip angle (beta) -> Yawing moment (n) */
+//    /* SidesliGENangle (beta) -> Yawing moment (n) */
 //    double Cn0;
 //    double Cnb;
 //};
@@ -332,6 +332,7 @@ public:
     enum IdentMode {
         LONGITUDINAL,
         LATERAL,
+        YAW,
         COMPLETE
     };
 
@@ -369,53 +370,54 @@ public:
 
     casadi::Function getAeroDynamicForces() { return this->AeroDynamics; }
 
-    template<typename W, typename P, typename LO, typename LA>
-    void getModel(P &g, P &rho,
+    /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
+    template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
+    void getModel(GEN &g, GEN &rho,
                   W &windFrom_deg, W &windSpeed,
-                  P &b, P &c, P &AR, P &S, P &wingSettingAngle,
-                  P &Mass, P &Ixx, P &Iyy, P &Izz, P &Ixz,
+                  GEN &b, GEN &c, GEN &AR, GEN &S, GEN &wingSettingAngle,
+                  GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
-                  P &e_o,
-                  LO &CD0,
-
-
-                  LO &CL0,
-                  LO &CLa,
-
-                  LO &Cm0,
-                  LO &Cma,
+                  GEN &e_o,
+                  DLO &CD0,
 
 
-                  LA &CYb,
+                  DLO &CL0,
+                  DLO &CLa,
 
-                  P &Cl0,
-                  LA &Clb,
-
-                  P &Cn0,
-                  LA &Cnb,
+                  DLO &Cm0,
+                  DLO &Cma,
 
 
-                  LO &CLq,
-                  LO &Cmq,
+                  DLA &CYb,
 
-                  LA &CYp,
-                  LA &Clp,
-                  LA &Cnp,
+                  GEN &Cl0,
+                  DLA &Clb,
 
-                  LA &CYr,
-                  LA &Clr,
-                  LA &Cnr,
+                  GEN &Cn0,
+                  DLA &Cnb,
 
 
-                  LO &CLde,
-                  LO &Cmde,
+                  DLO &CLq,
+                  DLO &Cmq,
 
-                  LA &Clda,
-                  LA &Cnda,
+                  DLA &CYp,
+                  DLA &Clp,
+                  DLA &Cnp,
 
-                  P &CYdr,
-                  P &Cldr,
-                  P &Cndr,
+                  DLA &CYr,
+                  DLA &Clr,
+                  DLA &Cnr,
+
+
+                  ELV &CLde,
+                  ELV &Cmde,
+
+                  AIL &Clda,
+                  AIL &Cnda,
+
+                  RUD &CYdr,
+                  RUD &Cldr,
+                  RUD &Cndr,
 
                   casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                   casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
