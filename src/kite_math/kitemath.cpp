@@ -28,6 +28,13 @@ SX quat_inverse(const SX &q)
     return SX::vertcat(tmp);
 }
 
+SX transform(const casadi::SX &q_ba, const casadi::SX &a_vect)
+{
+  SX tmp = quat_multiply( q_ba, quat_multiply(SX::vertcat({0, a_vect}), quat_inverse(q_ba)) );
+  return tmp(Slice(1,4), 0);
+}
+
+
 SX heaviside(const SX &x, const double K)
 {
     return K / (1 + exp(-4 * x));

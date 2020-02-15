@@ -25,7 +25,6 @@ namespace kite_utils {
         //props.Geometry.FinSurfaceArea = config["geometry"]["Sf"].as<double>();
         //props.Geometry.FinLeverArm = config["geometry"]["lf"].as<double>();
         //props.Geometry.AerodynamicCenter = config["geometry"]["Xac"].as<double>();
-        props.Geometry.wingSettingAngle = config["geom"]["set_ang"].as<double>();
 
         /** --------------------------- **/
         /** Mass and inertia parameters **/
@@ -152,7 +151,7 @@ namespace kite_utils {
 template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
 void KiteDynamics::getModel(GEN &g, GEN &rho,
                             W &windFrom_deg, W &windSpeed,
-                            GEN &b, GEN &c, GEN &AR, GEN &S, GEN &wingSettingAngle,
+                            GEN &b, GEN &c, GEN &AR, GEN &S,
                             GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
                             GEN &e_o,
@@ -226,11 +225,12 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     SX vW = SX::sym("WS", 3);                 /** Wind velocity **/
 //    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
 //    vW = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
-    vW = SX::vertcat({0,0,0});
+    vW = SX::vertcat({0, 0, 0});
 
-    SX qvW = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, vW}));
-    SX qvW_q = kmath::quat_multiply(qvW, q);
-    SX vW_b = qvW_q(Slice(1, 4), 0);            /** Wind velocity in body frame **/
+//    SX qvW = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, vW}));
+//    SX qvW_q = kmath::quat_multiply(qvW, q);
+//    SX vW_b = qvW_q(Slice(1, 4), 0);            /** Wind velocity in body frame **/
+    SX vW_b = kmath::transform(kmath::quat_inverse(q), vW);
 
     SX vA = v - vW_b;         /** Apparent velocity in body frame **/
     SX Va = SX::norm_2(vA);     /** Apparent speed **/
@@ -239,7 +239,7 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     SX aoa = atan(vA(2) / (vA(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX dyn_press = 0.5 * rho * Va * Va;         /** dynamic pressure **/
 
-    SX CL = (CL0 + CLa * (aoa ) + CLq * c / (2.0 * Va) * w(1) + CLde * dE);
+    SX CL = (CL0 + CLa * (aoa) + CLq * c / (2.0 * Va) * w(1) + CLde * dE);
 
     /** ------------------------- **/
     /** Dynamic Equations: Forces **/
@@ -261,16 +261,11 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     SX qw_b_inv = kmath::quat_inverse(qw_b);
 
     /** Aerodynamic forces in BRF: Faer0_b = qw_b * [0; -DRAG; SF; -LIFT] * qw_b_inv */
-    SX qF_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa), SX::vertcat({0, -DRAG, SF, -LIFT}));
-    SX qF_q = kmath::quat_multiply(qF_tmp, q_aoa);
-    Faero_b = qF_q(Slice(1, 4), 0);
-
+    Faero_b = kmath::transform(kmath::quat_inverse(q_aoa), SX::vertcat({-DRAG, SF, -LIFT}));
 
     /** Gravitational acceleration in BRF */
-    SX qG = kmath::quat_multiply(kmath::quat_inverse(q),
-                                 SX::vertcat({0, 0, 0, g}));
-    SX qG_q = kmath::quat_multiply(qG, q);
-    SX g_b = qG_q(Slice(1, 4), 0);
+    SX g_b = kmath::transform(kmath::quat_inverse(q), SX::vertcat({0, 0, g}));
+
 
     /** Propulsion force in BRF */
     /* T scales the maximal (static) thrust */
@@ -330,26 +325,15 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
 
     /** Angular motion equationin BRF */
     /** Moments transformation SRF -> BRF */
-    SX T_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa),
-                                    SX::vertcat({0, L, M, N}));
-    SX Trot = kmath::quat_multiply(T_tmp, q_aoa);
-    auto Maero = Trot(Slice(1, 4), 0);
+    auto Maero = kmath::transform(kmath::quat_inverse(q_aoa), SX::vertcat({L, M, N}));
 
-    /** Moment introduced by tether */
-    //    //DM tether_arm = DM({rx, ry, rz});
-    //    SX tether_arm = SX::vertcat({rx, ry, rz});
-    //    SX Mt = SX::cross(tether_arm, R_b);
-    //
-    //    auto w_dot = SX::mtimes(SX::inv(J), (Maero + Mt - SX::cross(w, SX::mtimes(J, w))));
     w_dot = SX::mtimes(SX::inv(J), (Maero - SX::cross(w, SX::mtimes(J, w))));
 
     /** ----------------------------- */
     /** Kinematic Equations: Position */
     /** ----------------------------- */
     /** Aircraft position in the IRF  */
-    SX qv = kmath::quat_multiply(q, SX::vertcat({0, v}));
-    SX qv_q = kmath::quat_multiply(qv, kmath::quat_inverse(q));
-    r_dot = qv_q(Slice(1, 4), 0);
+    r_dot = kmath::transform(q, v);
 
     /** ----------------------------- */
     /** Kinematic Equations: Attitude */
@@ -377,7 +361,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     double c = kiteProps.Geometry.mac;
     double AR = kiteProps.Geometry.aspectRatio;
     double S = kiteProps.Geometry.wingSurfaceArea;
-    double wingSettingAngle = kiteProps.Geometry.wingSettingAngle;
 
     /** --------------------------- **/
     /** Mass and inertia parameters **/
@@ -472,7 +455,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         getModel<SX, double, double, double, double, double, double>(
                 g, rho,
                 windFrom_deg, windSpeed,
-                b, c, AR, S, wingSettingAngle,
+                b, c, AR, S,
                 Mass, Ixx, Iyy, Izz, Ixz,
 
                 e_o, CD0,
@@ -508,7 +491,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         getModel<double, double, double, double, double, double, double>(
                 g, rho,
                 windFrom_deg, windSpeed,
-                b, c, AR, S, wingSettingAngle,
+                b, c, AR, S,
                 Mass, Ixx, Iyy, Izz, Ixz,
 
                 e_o, CD0,
@@ -600,7 +583,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     double c = kiteProps.Geometry.mac;
     double AR = kiteProps.Geometry.aspectRatio;
     double S = kiteProps.Geometry.wingSurfaceArea;
-    double wingSettingAngle = kiteProps.Geometry.wingSettingAngle;
 
     /** --------------------------- **/
     /** Mass and inertia parameters **/
@@ -700,7 +682,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             getModel<SX, double, SX, double, double, SX, double>(
                     g, rho,
                     windFrom_deg, windSpeed,
-                    b, c, AR, S, wingSettingAngle,
+                    b, c, AR, S,
                     Mass, Ixx, Iyy, Izz, Ixz,
 
                     e_o, CD0,
@@ -736,7 +718,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             getModel<double, double, SX, double, double, SX, double>(
                     g, rho,
                     windFrom_deg, windSpeed,
-                    b, c, AR, S, wingSettingAngle,
+                    b, c, AR, S,
                     Mass, Ixx, Iyy, Izz, Ixz,
 
                     e_o, CD0,
@@ -849,7 +831,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             getModel<SX, double, double, SX, SX, double, double>(
                     g, rho,
                     windFrom_deg, windSpeed,
-                    b, c, AR, S, wingSettingAngle,
+                    b, c, AR, S,
                     Mass, Ixx, Iyy, Izz, Ixz,
 
                     e_o, CD0,
@@ -885,7 +867,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             getModel<double, double, double, SX, SX, double, double>(
                     g, rho,
                     windFrom_deg, windSpeed,
-                    b, c, AR, S, wingSettingAngle,
+                    b, c, AR, S,
                     Mass, Ixx, Iyy, Izz, Ixz,
 
                     e_o, CD0,
@@ -998,7 +980,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             getModel<SX, double, double, SX, double, double, SX>(
                     g, rho,
                     windFrom_deg, windSpeed,
-                    b, c, AR, S, wingSettingAngle,
+                    b, c, AR, S,
                     Mass, Ixx, Iyy, Izz, Ixz,
 
                     e_o, CD0,
@@ -1034,7 +1016,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             getModel<double, double, double, SX, double, double, SX>(
                     g, rho,
                     windFrom_deg, windSpeed,
-                    b, c, AR, S, wingSettingAngle,
+                    b, c, AR, S,
                     Mass, Ixx, Iyy, Izz, Ixz,
 
                     e_o, CD0,
@@ -1166,7 +1148,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 //            /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
 //            getModel<SX, double, SX, SX>(g, rho,
 //                                         windFrom_deg, windSpeed,
-//                                         b, c, AR, S, wingSettingAngle,
+//                                         b, c, AR, S,
 //                                         Mass, Ixx, Iyy, Izz, Ixz,
 //
 //                                         e_o, CD0,
@@ -1200,7 +1182,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 //            /* Info: <General, Lon, Lat> Types for parameter groups, defined in function call */
 //            getModel<double, double, SX, SX>(g, rho,
 //                                             windFrom_deg, windSpeed,
-//                                             b, c, AR, S, wingSettingAngle,
+//                                             b, c, AR, S,
 //                                             Mass, Ixx, Iyy, Izz, Ixz,
 //
 //                                             e_o, CD0,

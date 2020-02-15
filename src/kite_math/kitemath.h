@@ -14,6 +14,7 @@ namespace kmath
     /** quaternion arithmetic */
     casadi::SX quat_multiply(const casadi::SX &q1, const casadi::SX &q2);
     casadi::SX quat_inverse(const casadi::SX &q);
+    casadi::SX transform(const casadi::SX &q_ba, const casadi::SX &a_vect);
 
     /** collection of custom functions */
     casadi::SX heaviside(const casadi::SX &x, const double K);
