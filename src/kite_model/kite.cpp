@@ -239,7 +239,7 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     SX aoa = atan(vA(2) / (vA(0) + 1e-4));  /** angle of attack definition [rad] (v(2)/L2(v)) **/
     SX dyn_press = 0.5 * rho * Va * Va;         /** dynamic pressure **/
 
-    SX CL = (CL0 + CLa * (aoa + wingSettingAngle) + CLq * c / (2.0 * Va) * w(1) + CLde * dE);
+    SX CL = (CL0 + CLa * (aoa ) + CLq * c / (2.0 * Va) * w(1) + CLde * dE);
 
     /** ------------------------- **/
     /** Dynamic Equations: Forces **/
@@ -261,17 +261,10 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     SX qw_b_inv = kmath::quat_inverse(qw_b);
 
     /** Aerodynamic forces in BRF: Faer0_b = qw_b * [0; -DRAG; SF; -LIFT] * qw_b_inv */
-    SX qF_tmp = kmath::quat_multiply(qw_b_inv, SX::vertcat({0, -DRAG, 0, -LIFT}));
-    SX qF_q = kmath::quat_multiply(qF_tmp, qw_b);
+    SX qF_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa), SX::vertcat({0, -DRAG, SF, -LIFT}));
+    SX qF_q = kmath::quat_multiply(qF_tmp, q_aoa);
     Faero_b = qF_q(Slice(1, 4), 0);
 
-    SX Zde = (-CLde) * dE * dyn_press * S;
-    SX FdE_tmp = kmath::quat_multiply(kmath::quat_inverse(q_aoa),
-                                      SX::vertcat({0, 0, 0, Zde}));
-    SX qFdE = kmath::quat_multiply(FdE_tmp, q_aoa);
-    SX FdE = qFdE(Slice(1, 4), 0);
-
-    Faero_b = Faero_b + FdE + SX::vertcat({0, SF, 0});
 
     /** Gravitational acceleration in BRF */
     SX qG = kmath::quat_multiply(kmath::quat_inverse(q),
@@ -319,7 +312,7 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
                                 Clda * dA + Cldr * dR);
 
     /** Pitching Aerodynamic Moment */
-    SX M = dyn_press * S * c * (Cm0 + Cma * (aoa + wingSettingAngle) +
+    SX M = dyn_press * S * c * (Cm0 + Cma * (aoa) +
                                 c / (2.0 * Va) * Cmq +
                                 Cmde * dE);
 

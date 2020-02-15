@@ -418,7 +418,7 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
         paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
         paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
 
-        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -relBound, relBound);
+        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, 0.02, 0.1, true);
         paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
 
 
