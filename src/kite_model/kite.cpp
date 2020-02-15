@@ -224,8 +224,9 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     //SX dF = SX::sym("dF"); /** flaps deflection [reserved, but not used]               **/
 
     SX vW = SX::sym("WS", 3);                 /** Wind velocity **/
-    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
-    vW = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
+//    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;    /** Wind To direction [rad] */
+//    vW = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0.0});
+    vW = SX::vertcat({0,0,0});
 
     SX qvW = kmath::quat_multiply(kmath::quat_inverse(q), SX::vertcat({0, vW}));
     SX qvW_q = kmath::quat_multiply(qvW, q);

@@ -811,25 +811,25 @@ int main() {
     /// State and Control dimensions ///
     const int dimx = 13;  // v(3) w(3) r(3) q(4)
 
-    const bool controlsIncludeWind = true;
-    const int dimu = 6;   // T elev rud ail + windFrom_deg windSpeed
+    const bool controlsIncludeWind = false;
+    const int dimu = 4;   // T elev rud ail + windFrom_deg windSpeed
 
     /// 1. Identification mode ///
-    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LATERAL;
+    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LONGITUDINAL;
 
     /// 2. lon: 9, lat: 11, yaw: 12, complete: 21 identification parameters ///
-    const int dimp = 11;
+    const int dimp = 9;
 
     /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
     // pitch / longitudinal
-//    const int DATA_POINTS = 106;
-//    const int poly_order = 3;
-//    const int num_segments = 35;
+    const int DATA_POINTS = 106;
+    const int poly_order = 3;
+    const int num_segments = 35;
 
     // roll / lateral
-    const int DATA_POINTS = 85;
-    const int poly_order = 3;
-    const int num_segments = 28;
+//    const int DATA_POINTS = 85;
+//    const int poly_order = 3;
+//    const int num_segments = 28;
 
 //    // yaw
 //    const int DATA_POINTS = 64;
