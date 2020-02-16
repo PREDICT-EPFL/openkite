@@ -418,7 +418,7 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
         paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
         paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
 
-        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, 0.02, 0.1, true);
+        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.1, 0.1, true);
         paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
 
 
@@ -428,7 +428,7 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
 
 
         /* Elevator */
-        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -0.9, 0.3, true);
         paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -relBound, relBound);
         // 9 longitudinal parameters
 
@@ -821,15 +821,15 @@ int main() {
     const int dimp = 9;
 
     /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
-    // pitch / longitudinal
-    const int DATA_POINTS = 106;
-    const int poly_order = 3;
-    const int num_segments = 35;
-
     // roll / lateral
 //    const int DATA_POINTS = 85;
 //    const int poly_order = 3;
 //    const int num_segments = 28;
+
+    // pitch / longitudinal
+    const int DATA_POINTS = 106;
+    const int poly_order = 3;
+    const int num_segments = 35;
 
 //    // yaw
 //    const int DATA_POINTS = 64;

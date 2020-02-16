@@ -6,6 +6,16 @@ using namespace casadi;
 namespace kmath
 {
 
+SX T1quat(const casadi::SX &rotAng) {
+    return SX::vertcat({cos(-rotAng / 2.0), sin(-rotAng / 2.0), 0, 0});
+}
+SX T2quat(const casadi::SX &rotAng) {
+    return SX::vertcat({cos(-rotAng / 2.0), 0, sin(-rotAng / 2.0), 0});
+}
+SX T3quat(const casadi::SX &rotAng) {
+    return SX::vertcat({cos(-rotAng / 2.0), 0, 0, sin(-rotAng / 2.0)});
+}
+
 SX quat_multiply(const SX &q1, const SX &q2)
 {
     SX s1 = q1(0);
@@ -28,7 +38,7 @@ SX quat_inverse(const SX &q)
     return SX::vertcat(tmp);
 }
 
-SX transform(const casadi::SX &q_ba, const casadi::SX &a_vect)
+SX quat_transform(const casadi::SX &q_ba, const casadi::SX &a_vect)
 {
   SX tmp = quat_multiply( q_ba, quat_multiply(SX::vertcat({0, a_vect}), quat_inverse(q_ba)) );
   return tmp(Slice(1,4), 0);
