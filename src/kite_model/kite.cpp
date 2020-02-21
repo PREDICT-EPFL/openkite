@@ -222,9 +222,10 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
 
     /** Aerodynamic (Wind) frame **/
     /* Wind velocity in body frame */
-    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;
-    SX g_vW = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0});
-    SX b_vW = kmath::quat_transform(q_bg, g_vW);
+//    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;
+//    SX g_vW = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0});
+//    SX b_vW = kmath::quat_transform(q_bg, g_vW);
+    SX b_vW = SX::vertcat({0,0,0});
 
     /* Apparent velocity in body frame, airspeed */
     SX vA = v - b_vW;
