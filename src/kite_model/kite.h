@@ -14,18 +14,12 @@ struct WindProperties {
 };
 
 struct PlaneGeometry {
-    double imuPitchOffset_deg;
+    //double imuPitchOffset_deg;
 
     double wingSpan;
     double mac;
     double aspectRatio;
     double wingSurfaceArea;
-//    double TaperRatio;
-//    double HTailsurface;
-//    double TailLeverArm;
-//    double FinSurfaceArea;
-//    double FinLeverArm;
-//    double AerodynamicCenter;
 };
 
 struct PlaneInertia {
@@ -94,181 +88,6 @@ struct PlaneAerodynamics {
     double Cndr;
 };
 
-//struct PlaneAerodynamics {
-//    double e_oswald;
-//
-//    /* Static Drag force (D) (total Drag force of aircraft) */
-//    double CD0;
-//
-//    struct AoA {
-//        /* Angle of attack (alpha) -> Lift force (L) (total Lift force of aircraft) */
-//        double CL0;
-//        double CLa;
-//
-//        /* Angle of attack (alpha) -> Pitching moment (m) */
-//        double Cm0;
-//        double Cma;
-//    } aoa;
-//
-//
-//    struct SidesliGEN{
-//        /* SidesliGENangle (beta) -> Side force (Y) */
-//        double CYb;
-//
-//        /* SidesliGENangle (beta) -> Rolling moment (l) */
-//        double Cl0;
-//        double Clb;
-//
-//        /* SidesliGENangle (beta) -> Yawing moment (n) */
-//        double Cn0;
-//        double Cnb;
-//    } ss;
-//
-//
-//    struct Rates {
-//
-//        struct Pitchrate {
-//            /* Pitchrate (q) -> Lift force (L), Pitching moment (m) */
-//            double CLq;
-//            double Cmq;
-//        } pitch;
-//
-//        struct Rollrate {
-//            /* Rollrate (p) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
-//            double CYp;
-//            double Clp;
-//            double Cnp;
-//        } roll;
-//
-//        struct Yawrate {
-//            /* Yawrate (r) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
-//            double CYr;
-//            double Clr;
-//            double Cnr;
-//        } yaw;
-//
-//    } rates;
-//
-//
-//    struct Controls {
-//        /** Aerodynamic effects of control **/
-//
-//        struct Elevator {
-//            /* Elevator deflection (de) -> Lift force (L), Pitching moment (m), Drag force (D) */
-//            double CLde;
-//            double Cmde;
-//        } elev;
-//
-//        struct Ailerons {
-//            /* Aileron deflection (da) -> Rolling moment (l), Yawing moment (n) */
-//            double Clda;
-//            double Cnda;
-//        } ail;
-//
-//        struct Rudder {
-//            /* Rudder deflection (dr) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
-//            double CYdr;
-//            double Cldr;
-//            double Cndr;
-//        } rud;
-//
-//    } ctrl;
-//
-//};
-//struct Controls {
-//
-//    struct Elevator {
-//        /* Elevator deflection (de) -> Lift force (L), Pitching moment (m), Drag force (D) */
-//        double CLde;
-//        double Cmde;
-//    } elev;
-//
-//    struct Ailerons {
-//        /* Aileron deflection (da) -> Rolling moment (l), Yawing moment (n) */
-//        double Clda;
-//        double Cnda;
-//    } ail;
-//
-//    struct Rudder {
-//        /* Rudder deflection (dr) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
-//        double CYdr;
-//        double Cldr;
-//        double Cndr;
-//    } rud;
-//
-//} ctrl;
-//
-//struct PlaneAerodynamics {
-//    double e_oswald;
-//
-//    /* Static Drag force (D) (total Drag force of aircraft) */
-//    double CD0;
-//};
-//
-//struct PlaneAeroAoa {
-//    /* Angle of attack (alpha) -> Lift force (L) (total Lift force of aircraft) */
-//    double CL0;
-//    double CLa;
-//
-//    /* Angle of attack (alpha) -> Pitching moment (m) */
-//    double Cm0;
-//    double Cma;
-//};
-//
-//struct PlaneAeroSs {
-//    /* SidesliGENangle (beta) -> Side force (Y) */
-//    double CYb;
-//
-//    /* SidesliGENangle (beta) -> Rolling moment (l) */
-//    double Cl0;
-//    double Clb;
-//
-//    /* SidesliGENangle (beta) -> Yawing moment (n) */
-//    double Cn0;
-//    double Cnb;
-//};
-//
-//
-//struct PlaneAeroRatePitch {
-//    /* Pitchrate (q) -> Lift force (L), Pitching moment (m) */
-//    double CLq;
-//    double Cmq;
-//};
-//
-//struct PlaneAeroRateRoll {
-//    /* Rollrate (p) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
-//    double CYp;
-//    double Clp;
-//    double Cnp;
-//};
-//
-//struct PlaneAeroRateYaw {
-//    /* Yawrate (r) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
-//    double CYr;
-//    double Clr;
-//    double Cnr;
-//};
-//
-///** Aerodynamic effects of control **/
-//struct PlaneAeroControlElev {
-//    /* Elevator deflection (de) -> Lift force (L), Pitching moment (m), Drag force (D) */
-//    double CLde;
-//    double Cmde;
-//};
-//
-//struct PlaneAeroControlAilerons {
-//    /* Aileron deflection (da) -> Rolling moment (l), Yawing moment (n) */
-//    double Clda;
-//    double Cnda;
-//};
-//
-//struct PlaneAeroControlRudder {
-//    /* Rudder deflection (dr) -> Side force (Y), Rolling moment (l), Yawing moment (n) */
-//    double CYdr;
-//    double Cldr;
-//    double Cndr;
-//};
-
 struct TetherProperties {
     double length;
     double Ks;
@@ -283,19 +102,7 @@ struct KiteProperties {
     WindProperties Wind;
     PlaneGeometry Geometry;
     PlaneInertia Inertia;
-
     PlaneAerodynamics Aerodynamics;
-
-//    PlaneAerodynamics aero;
-//    PlaneAeroAoa aero_aoa;
-//    PlaneAeroSs aero_ss;
-//    PlaneAeroRatePitch aero_rate_pitch;
-//    PlaneAeroRateRoll aero_rate_roll;
-//    PlaneAeroRateYaw aero_rate_yaw;
-//    PlaneAeroControlElev aero_ctrl_elev;
-//    PlaneAeroControlAilerons aero_ctrl_ail;
-//    PlaneAeroControlRudder aero_ctrl_rud;
-
     TetherProperties Tether;
 };
 
