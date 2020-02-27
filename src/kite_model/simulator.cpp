@@ -132,7 +132,7 @@ int main(int argc, char **argv)
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
-    KiteDynamics kite = KiteDynamics(kite_props, algo_props);
+    KiteDynamics kite = KiteDynamics(kite_props, algo_props, false);
 
     int broadcast_state;
     n.param<int>("broadcast_state", broadcast_state, 1);
