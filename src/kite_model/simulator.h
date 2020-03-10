@@ -4,11 +4,11 @@
 #include "kite.h"
 #include "integrator.h"
 #include "ros/ros.h"
-#include "openkite/aircraft_controls.h"
 #include "sensor_msgs/MultiDOFJointState.h"
 #include "geometry_msgs/PoseStamped.h"
 #include "geometry_msgs/Vector3Stamped.h"
-
+#include "openkite/aircraft_controls.h"
+#include <sensor_msgs/Joy.h>
 
 class Simulator
 {
@@ -42,10 +42,11 @@ private:
     casadi::DM      state;
     std::vector<double> specNongravForce;
 
-    void controlCallback(const openkite::aircraft_controls::ConstPtr &msg);
+//    void controlCallback(const openkite::aircraft_controls::ConstPtr &msg);
+    void controlCallback(const sensor_msgs::JoyConstPtr &msg);
     double sim_rate;
     sensor_msgs::MultiDOFJointState msg_state;
-    geometry_msgs::Vector3Stamped msg_accel;
+    //geometry_msgs::Vector3Stamped msg_accel;
 
     bool initialized;
 };

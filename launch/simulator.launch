@@ -10,7 +10,7 @@
                 Initial state:           v.......,  rates.., pos.......,  attQuat... -->
         <rosparam param="init_state"> [15, 0, 0,  0, 0, 0,  0, 0, -2,  0.38268, 0, 0, 0.92388] </rosparam>
 
-        <param name="kite_params" value="$(arg filepath_kiteParams)"/>
+        <param name="kiteParams_filepath" value="$(arg filepath_kiteParams)"/>
 
         <param name="windFrom_deg" value="$(arg windFrom_deg)" />
         <param name="windSpeed"    value="$(arg windSpeed)" />
