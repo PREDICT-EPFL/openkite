@@ -1,417 +1,398 @@
 #include "kiteNMPF.h"
 #include "integrator.h"
 #include <fstream>
+#include <utility>
 #include "pseudospectral/chebyshev.hpp"
 
 using namespace casadi;
 
+static DM flipDM(const DM &matrix, int axis) {
+    switch (axis) {
+        case 1:
+            return DM::vertcat({matrix(Slice(-1, 0, -1), Slice()), matrix(0, Slice())});
+        case 2:
+            return DM::horzcat({matrix(Slice(), Slice(-1, 0, -1)), matrix(Slice(), 0)});
+    }
+}
 
-void set_parameter_bounds(DM &LBP, DM &UBP, const int &index,
-                          const DM &REF_P, const double &LB_factor, const double &UB_factor) {
+void set_relative_parameter_bounds(DM &LBP, DM &UBP, const int &index,
+                                   const DM &REF_P, const double &LB_factor, const double &UB_factor) {
 
     LBP(index) = REF_P(index) + LB_factor * fabs(REF_P(index));
     UBP(index) = REF_P(index) + UB_factor * fabs(REF_P(index));
 
 }
 
-void set_parameter_bounds(DM &LBP, DM &UBP, const int &index,
-                          const double &absoluteLB, const double &absoluteUB) {
+void set_absolute_parameter_bounds(DM &LBP, DM &UBP, const int &index,
+                                   const double &absoluteLB, const double &absoluteUB) {
 
     LBP(index) = absoluteLB;
     UBP(index) = absoluteUB;
 
 }
 
-int main(void) {
 
-    std::string flightDataDir = "/home/johannes/identification/processed_flight_data/";
+struct OptProblemProperties {
 
-    struct FlightMetaData {
-        /// 1. ///
-        int session = 2;
-        int number = 1;
-        int seq = 4;
+    const int dimx;
+    const int dimu;
+    const int dimp;
 
-        /// 2. ///
-        //std::string maneuver = "identRoll";
-        std::string maneuver = "identPitch";
+    const int DATA_POINTS;
+    const int poly_order;
+    const int num_segments;
 
-        /// 3. ///
-        std::string resampleMethod = "cheb";
-        //std::string resampleMethod = "equal";
-    } flight;
+    OptProblemProperties(const int &dimx_, const int &dimu_, const int &dimp_,
+                         const int &DATA_POINTS_, const int &poly_order_, const int &num_segments_) :
 
-    /// 4. ///
-    const int dimp = 10; // lon: 10, lat: 14 identification parameters
+            dimx(dimx_), dimu(dimu_), dimp(dimp_),
+            DATA_POINTS(DATA_POINTS_), poly_order(poly_order_), num_segments(num_segments_) {}
 
-    /// 5. ///
-    const int DATA_POINTS = 127;
-    const int num_segments = 42;
-    const int poly_order = 3;
+};
 
-    /** COMMENT / UNCOMMENT THE SUITING PARAMETERS IN KITE.CPP ! */
+/* Data in */
+struct FlightMetaData {
+    int session{0};
+    int number{0};
+    int seq{0};
 
-    std::string flightDataPath = flightDataDir
-                                 + "session_" + std::to_string(flight.session)
-                                 + "/flight_" + std::to_string(flight.number);
-    if (!flight.maneuver.empty()) flightDataPath.append("/" + flight.maneuver);
-    flightDataPath.append("/seq_" + std::to_string(flight.seq) + "/");
+    std::string resampleMethod = "cheb";
+};
 
-    std::cout << flightDataPath << "\n";
+/* Parameter struct for sorting by sensitivity in descending order */
+struct Parameter {
 
-    /** define kite dynamics */
-    std::string kite_params_file = "/home/johannes/identification/eg4.yaml";
-    KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
+    int id{0};
+    const std::string groupName;
+    const std::string name;
+    const double refValue{};
+    const double lowerBound{};
+    const double upperBound{};
 
-    /** Load wind data **/
-    std::ifstream id_wind_file(flightDataPath + "wind.txt", std::ios::in);
-    if (!id_wind_file.fail()) {
-        int windFrom_deg;
-        double windSpeed;
-        id_wind_file >> windFrom_deg;
-        id_wind_file >> windSpeed;
+    double foundValue{};
+    double sensitivity{};
 
-        kite_props.Wind.WindFrom_deg = windFrom_deg;
-        kite_props.Wind.WindSpeed = windSpeed;
+    /* With groupName */
+    Parameter(
+            std::string groupName_,
+            std::string name_,
+            const double &refValue_,
+            const double &lowerBound_,
+            const double &upperBound_,
+            const bool absBounds = false) :
+
+            groupName(std::move(groupName_)),
+            name(std::move(name_)),
+            refValue(refValue_),
+            lowerBound((absBounds) ? lowerBound_ : (refValue_ + lowerBound_ * std::abs(refValue_))),
+            upperBound((absBounds) ? upperBound_ : (refValue_ + upperBound_ * std::abs(refValue_))) {}
+
+    Parameter(std::string name_) :
+
+            name(std::move(name_)) {}
+
+    Parameter() = default;
+
+
+    bool operator<(const Parameter &param) const {
+        return sensitivity > param.sensitivity;
+    }
+};
+
+std::vector<FlightMetaData> readIn_identSchedule(const std::string &filedir, const std::string &identManeuver) {
+
+
+    std::string filepath = filedir + identManeuver + "_identSchedule.txt";
+
+    std::vector<FlightMetaData> flights;
+
+    int id_schedule_session{9};
+    int id_schedule_flightNumber{2};
+    int id_schedule_seq{2};
+
+    std::ifstream id_schedule_file(filepath, std::ios::in);
+    if (!id_schedule_file.fail()) {
+
+        while (id_schedule_file >> id_schedule_session &&
+               id_schedule_file >> id_schedule_flightNumber &&
+               id_schedule_file >> id_schedule_seq) {
+
+            FlightMetaData flightToSchedule;
+            flightToSchedule.session = id_schedule_session;
+            flightToSchedule.number = id_schedule_flightNumber;
+            flightToSchedule.seq = id_schedule_seq;
+
+            flights.push_back(flightToSchedule);
+        }
+
     } else {
-        std::cout << "Could not open : id wind data file \n";
-        id_wind_file.clear();
+        std::cout << "Could not open : id schedule file \n";
+        id_schedule_file.clear();
     }
 
+    return flights;
+}
+
+void get_seqDir(const std::string &flightDataDir, const std::string &identManeuver, const FlightMetaData &flight,
+
+                std::string &seq_dir) {
+
+    seq_dir = flightDataDir
+              + "session_" + std::to_string(flight.session)
+              + "/flight_" + std::to_string(flight.number);
+    if (!identManeuver.empty()) seq_dir.append("/" + identManeuver);
+    seq_dir.append("/seq_" + std::to_string(flight.seq) + "/");
+}
+
+
+void readIn_identificationData(const std::string &filepath, const int &dimension, const int &DATA_POINTS,
+
+                               DM &identData) {
+
+    /* File to read in:
+     * Rows: Timesteps, Columns: States/Controls
+     *
+     * Each row contains a vector of the states at that time. */
+
     /** Load identification data */
-    std::ifstream id_data_file(flightDataPath + flight.resampleMethod + "_states.txt", std::ios::in);
-    std::ifstream id_control_file(flightDataPath + flight.resampleMethod + "_controls.txt", std::ios::in);
-    const int dimx = 13;  // v(3) w(3) r(3) q(4)
-    const int dimu = 4; // T elev rud ail
+    std::ifstream id_data_file(filepath, std::ios::in);
 
-    DM id_data = DM::zeros(1 + dimx, DATA_POINTS);      // Time + States
-    DM id_control = DM::zeros(1 + dimu, DATA_POINTS);   // Time + Controls
+    /* Columns: Timesteps, Rows: States/Controls
+     * Each column contains a vector of the states at that time */
+    DM id_data = DM::zeros(dimension, DATA_POINTS);
 
-    /** load state trajectory */
+    /** load data */
     if (!id_data_file.fail()) {
-        for (uint i = 0; i < DATA_POINTS; ++i) {
-            for (uint j = 0; j < (1 + dimx); ++j) {       // Time + States
+
+        for (uint iDATA_POINT = 0; iDATA_POINT < DATA_POINTS; ++iDATA_POINT) {
+            /* Loop through rows */
+
+            for (uint jDim = 0; jDim < dimension; ++jDim) {
+                /* Loop through columns */
+
                 double entry;
                 id_data_file >> entry;
-                id_data(j, i) = entry;
+                id_data(jDim, iDATA_POINT) = entry;
+//                identData(jDim, iDATA_POINT) = entry;
+
             }
         }
     } else {
-        std::cout << "Could not open : id state data file \n";
+        std::cout << "Could not open id data file.\n";
         id_data_file.clear();
     }
 
-    /** load control data */
-    if (!id_control_file.fail()) {
-        for (uint i = 0; i < DATA_POINTS; ++i) {
-            for (uint j = 0; j < (1 + dimu); ++j) {     // Time + Controls
-                double entry;
-                id_control_file >> entry;
-                /** put in reverse order to comply with Chebyshev method */
-                id_control(j, DATA_POINTS - 1 - i) = entry;
-            }
+    identData = id_data;
+}
+
+void readIn_sequenceInfo(const std::string &filepath,
+
+                         int &windFrom_deg, double &windSpeed, double &tf) {
+
+    /** Load wind data **/
+    std::ifstream id_seqInfo_file(filepath, std::ios::in);
+    if (!id_seqInfo_file.fail()) {
+
+        std::string keyBuffer;
+
+        id_seqInfo_file >> windFrom_deg;
+        id_seqInfo_file >> windSpeed;
+
+        id_seqInfo_file >> keyBuffer;
+        id_seqInfo_file >> tf;
+
+    } else {
+        std::cout << "Could not open: Sequence info file\n";
+        id_seqInfo_file.clear();
+    }
+}
+
+void readIn_identConfig(const std::string &filepath,
+
+                        std::string &kite_params_in_dir, std::string &kite_params_in_filename,
+                        int &nIt, bool &kite_params_warmStart) {
+
+    int kite_params_warmStart_int{0};
+
+    /* Read in identConfig file */
+    std::ifstream id_config_file(filepath, std::ios::in);
+    if (!id_config_file.fail()) {
+        id_config_file >> kite_params_in_dir;
+        id_config_file >> kite_params_in_filename;
+        id_config_file >> nIt;
+        id_config_file >> kite_params_warmStart; //_int;
+
+        //kite_params_warmStart = static_cast<bool>(kite_params_warmStart_int);
+
+        kite_params_in_dir.append("/");
+
+    } else {
+        std::cout << "Could not open : identConfig file \n";
+        id_config_file.clear();
+    }
+}
+
+
+void readIn_sequenceData(const std::string &seq_dir, const FlightMetaData &flight,
+                         const int &dimx, const int &dimu, const int &DATA_POINTS,
+
+                         DM &id_time, DM &id_states_woTime, DM &id_controls_rev_woTime,
+                         int &windFrom_deg, double &windSpeed, double &tf,
+                         std::string &kite_baseParams_dir, std::string &kite_baseParams_filename,
+                         int &nIt, bool &kite_params_warmStart) {
+
+    /* States */
+    DM id_states_wTime;
+    readIn_identificationData(seq_dir + flight.resampleMethod + "_states.txt", 1 + dimx, DATA_POINTS,
+
+                              id_states_wTime);
+
+    id_time = id_states_wTime(0, Slice(0, DATA_POINTS));
+    id_states_woTime = id_states_wTime(Slice(1, 1 + dimx), Slice(0, DATA_POINTS));
+
+    /* Controls */
+    DM id_controls_wTime;
+    readIn_identificationData(seq_dir + flight.resampleMethod + "_controls.txt", 1 + dimu, DATA_POINTS,
+
+                              id_controls_wTime);
+
+    DM id_controls_rev = flipDM(id_controls_wTime, 2);
+    id_controls_rev_woTime = id_controls_rev(Slice(1, 1 + dimu), Slice(0, DATA_POINTS));
+
+    /* Sequence info */
+    readIn_sequenceInfo(seq_dir + "seqInfo.txt",
+
+                        windFrom_deg, windSpeed, tf);
+
+    /* Ident config */
+    readIn_identConfig(seq_dir + "identConfig.txt",
+
+                       kite_baseParams_dir, kite_baseParams_filename, nIt, kite_params_warmStart);
+}
+
+
+void readin_optResultsFile(const std::string &filepath,
+
+                           DM &optResult_x, DM &optResult_lam_x, DM &optResult_lam_g) {
+
+    std::ifstream optRes_file(filepath, std::ios::in);
+
+    if (!optRes_file.fail()) {
+
+
+        std::stringstream linestream;
+        std::string line;
+
+        std::string str;
+        double number{0};
+
+        /** First line **/
+        getline(optRes_file, line);
+        linestream << line;
+
+        linestream >> str;
+        int i{0};
+        while (linestream >> number) {
+            optResult_x(i) = number;
+            ++i;
+        }
+        linestream.clear();
+
+        /** Second line **/
+        getline(optRes_file, line);
+        linestream << line;
+
+        linestream >> str;
+        int j{0};
+        while (linestream >> number) {
+            optResult_lam_x(j) = number;
+            ++j;
+        }
+        linestream.clear();
+
+        /** Third line **/
+        getline(optRes_file, line);
+        linestream << line;
+
+        linestream >> str;
+        int k{0};
+        while (linestream >> number) {
+            optResult_lam_g(k) = number;
+            ++k;
         }
 
     } else {
-        std::cout << "Could not open : id control data file \n";
-        id_control_file.clear();
+        std::cout << "Could not open optResult file.\n";
+        optRes_file.clear();
     }
+}
+
+
+/* Set up */
+void get_costMatrix(const KiteDynamics::IdentMode identMode,
+
+                    DM &Q) {
+
+    /* Default */
+    Q = SX::diag(SX({100, 100, 100,   // vx vy vz
+                     200, 200, 200,   // wx wy wz
+                     10, 10, 10,       // x y z
+                     100, 100, 100, 100})); //qw qx qy qz
+
+    if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
+
+//        Q = SX::diag(SX({100, 100, 100,   // vx vy vz
+//                         200, 200, 200,   // wx wy wz
+//                         10, 10, 10,   // x y z
+//                         100, 100, 100, 100}));   //qw qx qy qz
+
+    } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
+
+//        Q = SX::diag(SX({0, 100, 0,   // vx vy vz
+//                         200, 0, 200,   // wx wy wz
+//                         50, 50, 0,   // x y z
+//                         100, 100, 100, 100})); //qw qx qy qz
+
+    } else if (identMode == KiteDynamics::IdentMode::YAW) {
+
+        /* Use default */
+
+
+    } else {
+
+        Q = SX::diag(SX::ones(13) * 100);
+    }
+
+}
+
+void get_kiteDynamics(const std::string &filepath, const double windFrom_deg, const double windSpeed,
+                      const KiteDynamics::IdentMode &identMode, const bool controlsIncludeWind,
+
+                      KiteDynamics &kite, KiteDynamics &kite_int) {
+
+    KiteProperties kite_props = kite_utils::LoadProperties(filepath);
+    kite_props.Wind.WindFrom_deg = windFrom_deg;
+    kite_props.Wind.WindSpeed = windSpeed;
 
     AlgorithmProperties algo_props;
     algo_props.Integrator = CVODES;
     algo_props.sampling_time = 0.02;
-    //algo_props.sampling_time = static_cast<double>(id_data(0, 1) - id_data(0, 0));
 
-    KiteDynamics kite(kite_props, algo_props, true);
-    KiteDynamics kite_int(kite_props, algo_props); //integration model
-    Function ode = kite_int.getNumericDynamics();
+    kite = KiteDynamics(kite_props, algo_props, identMode, controlsIncludeWind);
+    kite_int = KiteDynamics(kite_props, algo_props, controlsIncludeWind); //integration model
+}
 
-    /** get dynamics function and state Jacobian */
-    Function DynamicsFunc = kite.getNumericDynamics();
-    SX X = kite.getSymbolicState();
-    SX U = kite.getSymbolicControl();
-    SX P = kite.getSymbolicParameters();
+void create_nlpSolver(const SX &opt_var, const SX &fitting_error, const SX &diff_constr,
 
-    /** state bounds */
-    DM LBX = DM::vertcat({2.0, -50, -50,
-                          -4 * M_PI, -4 * M_PI, -4 * M_PI,
-                          -300, -300, -300,
-                          -1.05, -1.05, -1.05, -1.05});     // for infinity use -DM::inf(1) and DM::inf(1)
-    DM UBX = DM::vertcat({50, 50, 50,
-                          4 * M_PI, 4 * M_PI, 4 * M_PI,
-                          300, 300, 300,
-//                          10, 10, 10,
-                          1.05, 1.05, 1.05, 1.05});
-
-    /** control bounds */
-    DM LBU = DM::vec(
-            id_control(Slice(1, id_control.size1()), Slice(0, id_control.size2()))); // without Time (first row)
-    DM UBU = DM::vec(
-            id_control(Slice(1, id_control.size1()), Slice(0, id_control.size2()))); // without Time (first row)
-
-    /** parameter bounds */
-    DM REF_P;
-    DM LBP;
-    DM UBP;
-
-    /** Cost matrix **/
-    DM Q;
-
-    /** parameter bounds preparation */
-    /** --------------------- **/
-    /** Wind properties       **/
-    /** --------------------- **/
-    double windFrom_deg = kite_props.Wind.WindFrom_deg;
-    double windSpeed = kite_props.Wind.WindSpeed;
-
-    /** --------------------- **/
-    /** Geometric parameters  **/
-    /** --------------------- **/
-    double imuPitchOffset = kite_props.Geometry.ImuPitchOffset_deg * M_PI / 180.0;
-
-    //double b = kite_props.Geometry.WingSpan;
-    //double c = kite_props.Geometry.MAC;
-    //double AR = kite_props.Geometry.AspectRatio;
-    //double S = kite_props.Geometry.WingSurfaceArea;
-    //double lam = kite_props.Geometry.TaperRatio;
-    //double St = kite_props.Geometry.HTailsurface;
-    //double lt = kite_props.Geometry.TailLeverArm;
-    //double Sf = kite_props.Geometry.FinSurfaceArea;
-    //double lf = kite_props.Geometry.FinLeverArm;
-    //double Xac = kite_props.Geometry.AerodynamicCenter;
-    /** @todo: get rid of all magic numbers **/
-    //double Xcg = 0.031/c;               /** Center of Gravity (CoG) wrt leading edge [1/c] **/
-    //double Vf = (Sf * lf) / (S * b);    /** fin volume coefficient []                      **/
-    //double Vh = (lt * St) / (S * c);    /** horizontal tail volume coefficient []          **/
-
-    /** --------------------------- **/
-    /** Mass and inertia parameters **/
-    /** --------------------------- **/
-    //double Mass = kite_props.Inertia.Mass;
-    //double Ixx = kite_props.Inertia.Ixx;
-    //double Iyy = kite_props.Inertia.Iyy;
-    //double Izz = kite_props.Inertia.Izz;
-    //double Ixz = kite_props.Inertia.Ixz;
-
-    /** ------------------------------- **/
-    /** Static aerodynamic coefficients **/
-    /** ------------------------------- **/
-    double CL0 = kite_props.Aerodynamics.CL0;
-    //double CL0_t = kite_props.Aerodynamics.CL0_tail;
-    double CLa_tot = kite_props.Aerodynamics.CLa_total;
-    //double CLa_w = kite_props.Aerodynamics.CLa_wing;
-    //double CLa_t = kite_props.Aerodynamics.CLa_tail;
-    //double e_o = kite_props.Aerodynamics.e_oswald;
-
-    double CD0_tot = kite_props.Aerodynamics.CD0_total;
-    //double CD0_w = kite_props.Aerodynamics.CD0_wing;
-    //double CD0_t = kite_props.Aerodynamics.CD0_tail;
-    double CYb = kite_props.Aerodynamics.CYb;
-    //double CYb_vt = kite_props.Aerodynamics.CYb_vtail;
-    double Cm0 = kite_props.Aerodynamics.Cm0;
-    double Cma = kite_props.Aerodynamics.Cma;
-    double Cn0 = kite_props.Aerodynamics.Cn0;
-    double Cnb = kite_props.Aerodynamics.Cnb;
-    double Cl0 = kite_props.Aerodynamics.Cl0;
-    double Clb = kite_props.Aerodynamics.Clb;
-    //double dw = CLa_tot / (pi * e_o * AR);             /** downwash acting at the tail [] **/
-
-    double CLq = kite_props.Aerodynamics.CLq;
-    double Cmq = kite_props.Aerodynamics.Cmq;
-    double CYr = kite_props.Aerodynamics.CYr;
-    double Cnr = kite_props.Aerodynamics.Cnr;
-    double Clr = kite_props.Aerodynamics.Clr;
-    double CYp = kite_props.Aerodynamics.CYp;
-    double Clp = kite_props.Aerodynamics.Clp;
-    double Cnp = kite_props.Aerodynamics.Cnp;
-
-    /** ------------------------------ **/
-    /** Aerodynamic effects of control **/
-    /** ------------------------------ **/
-    double CLde = kite_props.Aerodynamics.CLde;
-    double CYdr = kite_props.Aerodynamics.CYdr;
-    double Cmde = kite_props.Aerodynamics.Cmde;
-    double Cndr = kite_props.Aerodynamics.Cndr;
-    double Cldr = kite_props.Aerodynamics.Cldr;
-    //double CDde = kite_props.Aerodynamics.CDde;
-    double Clda = kite_props.Aerodynamics.Clda;
-    double Cnda = kite_props.Aerodynamics.Cnda;
-
-    //double CL_daoa = -2 * CLa_t * Vh * dw;
-    //double Cm_daoa = -2 * CLa_t * Vh * (lt/c) * dw;
-
-    /** ------------------------------ **/
-    /**        Tether parameters       **/
-    /** ------------------------------ **/
-    //    double Lt = kite_props.Tether.length;
-    //    double Ks = kite_props.Tether.Ks;
-    //    double Kd = kite_props.Tether.Kd;
-    //    double rx = kite_props.Tether.rx;
-    //    double ry = kite_props.Tether.ry;
-    //    double rz = kite_props.Tether.rz;
-
-    // LBP(21] = 2.65;    UBP(21] = 2.75;   // tether length
-    // LBP(22] = 150.0;  UBP(22] = 150.0;  // Ks
-    // LBP(23] = 0.0;    UBP(23] = 10;   // Kd
-    // LBP(24] = 0.0;    UBP(24] = 0.0;   // rx
-    // LBP(25] = 0.0;    UBP(25] = 0.0;  // rz
-
-    //DM REF_P = DM::vertcat({Lt, Ks, Kd, rx, ry, rz});
-
-    /** LONGITUDINAL IDENTIFICATION PARAMETERS ---------------------------------------------------------------------- */
-    if (flight.maneuver == "identPitch") {
-        int b = REF_P.size1(); // parameter size before
-
-        REF_P = DM::vertcat({REF_P,
-                             imuPitchOffset,
-                             CL0, CLa_tot,
-                             CD0_tot, Cm0, Cma,
-                             CLq, Cmq,
-                             CLde, Cmde,
-                            }); // 10 longitudinal parameters
-
-        /** parameter bounds */
-        LBP = REF_P;
-        UBP = REF_P;
-
-        set_parameter_bounds(LBP, UBP, b + 0, -10.0 * M_PI / 180.0, 10.0 * M_PI / 180.0); // imuPitchOffset
-
-        set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.1, 0.1); // CL0
-        set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.05, 0.1); // CLa_tot
-
-        set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.1, 0.25); // CD0_tot
-        set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5); // Cm0
-        set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.1, 0.3); // Cma
-
-        set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.2, 0.2); // CLq
-        set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.3, 0.3); // Cmq
-
-        set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.5, 0.5); // CLde
-        set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5); // Cmde
-
-        Q = SX::diag(SX({1e2, 0, 1e2,
-                         0, 1e2, 0,
-                         1e1, 1e1, 1e2,
-                         1e2, 1e2, 1e2, 1e2}));
-    }
-    /** END OF LONGITUDINAL IDENTIFICATION PARAMETERS --------------------------------------------------------------- */
-
-    /** LATERAL IDENTIFICATION PARAMETERS --------------------------------------------------------------------------- */
-    if (flight.maneuver == "identRoll") {
-        int b = REF_P.size1(); // parameter size before
-        REF_P = DM::vertcat({REF_P,
-                             CYb, Cnb, Clb,
-                             CYr, Cnr, Clr, CYp, Clp, Cnp,
-                             CYdr, Cndr, Cldr, Clda, Cnda,
-                            }); // 14 lateral parameters
-
-        /** parameter bounds */
-        LBP = REF_P;
-        UBP = REF_P;
-
-        set_parameter_bounds(LBP, UBP, b + 0, REF_P, -0.5, 0.5);  // CYb
-        set_parameter_bounds(LBP, UBP, b + 1, REF_P, -0.5, 0.5);  // Cnb
-        set_parameter_bounds(LBP, UBP, b + 2, REF_P, -0.5, 0.5);  // Clb
-
-        set_parameter_bounds(LBP, UBP, b + 3, REF_P, -0.3, 0.3);  // CYr
-        set_parameter_bounds(LBP, UBP, b + 4, REF_P, -0.5, 0.5);  // Cnr
-        set_parameter_bounds(LBP, UBP, b + 5, REF_P, -0.5, 0.5);  // Clr
-        set_parameter_bounds(LBP, UBP, b + 6, REF_P, -0.5, 0.5);  // CYp
-        set_parameter_bounds(LBP, UBP, b + 7, REF_P, -0.5, 0.5);  // Clp
-        set_parameter_bounds(LBP, UBP, b + 8, REF_P, -0.3, 1.0);  // Cnp
-
-        set_parameter_bounds(LBP, UBP, b + 9, REF_P, -0.5, 0.5);  // CYdr
-        set_parameter_bounds(LBP, UBP, b + 10, REF_P, -0.5, 0.5);  // Cndr
-        set_parameter_bounds(LBP, UBP, b + 11, REF_P, -0.5, 0.5);  // Cldr
-        set_parameter_bounds(LBP, UBP, b + 12, REF_P, -0.5, 0.5);  // Clda
-        set_parameter_bounds(LBP, UBP, b + 13, REF_P, -0.5, 0.5);  // Cnda
-
-        Q = SX::diag(SX({0, 1e2, 0,
-                         1e2, 0, 1e2,
-                         1e1, 1e1, 1e2,
-                         1e2, 1e2, 1e2, 1e2}));
-    }
-    /** END OF LATERAL IDENTIFICATION PARAMETERS -------------------------------------------------------------------- */
-
-    std::cout << "OK: Parameter preparation\n";
-
-    /** ----------------------------------------------------------------------------------*/
-//    const int num_segments = 42;
-//    const int poly_order = 3;
-//    const int dimx = 13;
-//    const int dimu = 4;
-    //const double tf = 10.0;
-    //int dimx = static_cast<int>(REF_P.size1());
-    //int dimu = static_cast<int>(U.size1());
-    //int dimp = static_cast<int>(REF_P.size1());
-    double tf = static_cast<double>(id_data(0, id_data.size2() - 1) - id_data(0, 0));
-
-    std::cout << "tf = " << tf << "\n";
-
-    Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
-    SX diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
-    diff_constr = diff_constr(casadi::Slice(0, num_segments * poly_order * dimx));
-
-    SX varx = spectral.VarX();
-    SX varu = spectral.VarU();
-    SX varp = spectral.VarP();
-
-    SX opt_var = SX::vertcat(SXVector{varx, varu, varp});
-
-    SX lbg = SX::zeros(diff_constr.size());
-    SX ubg = SX::zeros(diff_constr.size());
-
-    /** set inequality (box) constraints */
-    /** state */
-    SX lbx = SX::repmat(LBX, num_segments * poly_order + 1, 1);
-    SX ubx = SX::repmat(UBX, num_segments * poly_order + 1, 1);
-
-    /** control */
-    lbx = SX::vertcat({lbx, LBU});
-    ubx = SX::vertcat({ubx, UBU});
-
-    /** parameters */
-    lbx = SX::vertcat({lbx, LBP});
-    ubx = SX::vertcat({ubx, UBP});
-
-//    DM Q = SX::diag(SX({1e3, 1e2, 1e2,
-//                        1e2, 1e2, 1e2,
-//                        1e1, 1e1, 1e2,
-//                        1e2, 1e2, 1e2, 1e2}));
-
-    //DM Q = 1e1 * DM::eye(13);
-    double alpha = 100.0;
-
-    SX fitting_error = 0;
-    SX varx_ = SX::reshape(varx, dimx, DATA_POINTS);
-
-    for (uint j = 0; j < DATA_POINTS; ++j) {
-        SX measurement = id_data(Slice(1, id_data.size1()), j);
-        SX error = measurement - varx_(Slice(0, varx_.size1()), varx_.size2() - j - 1);
-        fitting_error += static_cast<double>(1.0 / DATA_POINTS) * SX::sum1(SX::mtimes(Q, pow(error, 2)));
-    }
-
-    /** add regularisation */
-    // fitting_error = fitting_error + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
-
-    /** alternative approximation */
-    /**
-    SX x = SX::sym("x", dimx);
-    SX y = SX::sym("y", dimx);
-    SX cost_function = SX::sumRows( SX::mtimes(Q, pow(x - y, 2)) );
-    Function IdCost = Function("IdCost",{x,y}, {cost_function});
-    SX fitting_error2 = spectral.CollocateIdCost(IdCost, id_data, 0, tf);
-    fitting_error2 = fitting_error2 + alpha * SX::dot(varp - SX({REF_P}), varp - SX({REF_P}));
-    */
+                      Function &nlpSolver) {
 
     /** formulate NLP */
     SXDict NLP;
-    Dict OPTS;
-    DMDict ARG;
     NLP["x"] = opt_var;
     NLP["f"] = fitting_error;
     NLP["g"] = diff_constr;
 
+    Dict OPTS;
     OPTS["ipopt.linear_solver"] = "mumps";
     OPTS["ipopt.print_level"] = 5;
     OPTS["ipopt.tol"] = 1e-4;
@@ -419,155 +400,810 @@ int main(void) {
     OPTS["ipopt.warm_start_init_point"] = "yes";
     //OPTS["ipopt.max_iter"]       = 20;
 
-    Function NLP_Solver = nlpsol("solver", "ipopt", NLP, OPTS);
+    nlpSolver = nlpsol("solver", "ipopt", NLP, OPTS);
+}
 
-    std::cout << "OK: Solver set up\n";
+void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDynamics::IdentMode &identMode,
 
-    /** set default args */
-    ARG["lbx"] = lbx;
-    ARG["ubx"] = ubx;
-    ARG["lbg"] = lbg;
-    ARG["ubg"] = ubg;
+                                  DM &REF_P, DM &LBP, DM &UBP, std::list<Parameter> &paramList) {
 
-    DMDict solution;
-    DM feasible_state;
-    DM init_state = id_data(Slice(1, id_data.size1()), 0);
 
-    /** if the solutions available load them from file */
-    if (kite_utils::file_exists(flightDataPath + "id_x0.txt")) {
-        DM sol_x = kite_utils::read_from_file(flightDataPath + "id_x0.txt");
-        ARG["x0"] = DM::vertcat(DMVector{sol_x, REF_P});
-        feasible_state = sol_x;
+    if (identMode == KiteDynamics::LONGITUDINAL) {
 
-        std::cout << "Initial guess loaded from a file \n";
-    } else {
-        /** otherwise, provide initial guess from integrator */
-        casadi::DMDict props;
-        props["scale"] = 0;
-        props["P"] = casadi::DM::diag(casadi::DM(
-                {0.1, 1 / 3.0, 1 / 3.0,
-                 1 / 2.0, 1 / 5.0, 1 / 2.0,
-                 1 / 3.0, 1 / 3.0, 1 / 3.0,
-                 1.0, 1.0, 1.0, 1.0}));
-        PSODESolver<poly_order, num_segments, dimx, dimu> ps_solver(ode, tf, props);
+        double relBound = 0.5;
 
-        DM init_control = DM({0.1, 0.0, 0.0, 0.0});
-        init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
-        std::cout << "init_state: " << init_state << " init_control: " << init_control << "\n";
-        solution = ps_solver.solve_trajectory(init_state, init_control, true);
-        feasible_state = solution.at("x");
-        ARG["x0"] = casadi::DM::vertcat(casadi::DMVector{feasible_state, REF_P});
+        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -relBound, relBound);
+
+        /* AOA */
+        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
+        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
+
+        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.1, 0.1, true);
+        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
+
+
+        /* Pitchrate */
+        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -relBound, relBound);
+        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -relBound, relBound);
+
+
+        /* Elevator */
+        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -0.9, 0.3, true);
+        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -relBound, relBound);
+        // 9 longitudinal parameters
+
+    } else if (identMode == KiteDynamics::LATERAL) {
+
+        double relBound = 0.5;
+
+        /* Sideslip */
+        paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
+
+        paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb, -relBound, relBound);
+
+        paramList.emplace_back("aero_ss", "Cnb", kiteProps.Aerodynamics.Cnb, -relBound, relBound);
+
+
+        /* Rollrate */
+        paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -relBound, relBound);
+        paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -relBound, relBound);
+        paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -relBound, relBound);
+
+        /* Yawrate */
+        paramList.emplace_back("aero_rate_yaw", "CYr", kiteProps.Aerodynamics.CYr, -relBound, relBound);
+        paramList.emplace_back("aero_rate_yaw", "Clr", kiteProps.Aerodynamics.Clr, -relBound, relBound);
+        paramList.emplace_back("aero_rate_yaw", "Cnr", kiteProps.Aerodynamics.Cnr, -relBound, relBound);
+
+
+        /* Ailerons */
+        paramList.emplace_back("aero_ctrl_ail", "Clda", kiteProps.Aerodynamics.Clda, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_ail", "Cnda", kiteProps.Aerodynamics.Cnda, -relBound, relBound);
+        // 11 lateral/aileron parameters
+
+//        /* Rudder */
+//        paramList.emplace_back(11, "aero_ctrl_rud", "CYdr", kiteProps.Aerodynamics.CYdr, -relBound, relBound);
+//        paramList.emplace_back(12, "aero_ctrl_rud", "Cldr", kiteProps.Aerodynamics.Cldr, -relBound, relBound);
+//        paramList.emplace_back(13, "aero_ctrl_rud", "Cndr", kiteProps.Aerodynamics.Cndr, -relBound, relBound);
+
+    } else if (identMode == KiteDynamics::YAW) {
+
+        double relBound = 0.5;
+
+        /* Sideslip */
+        paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
+
+        paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb, -relBound, relBound);
+
+        paramList.emplace_back("aero_ss", "Cnb", kiteProps.Aerodynamics.Cnb, -relBound, relBound);
+
+
+        /* Rollrate */
+        paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -relBound, relBound);
+        paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -relBound, relBound);
+        paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -relBound, relBound);
+
+        /* Yawrate */
+        paramList.emplace_back("aero_rate_yaw", "CYr", kiteProps.Aerodynamics.CYr, -relBound, relBound);
+        paramList.emplace_back("aero_rate_yaw", "Clr", kiteProps.Aerodynamics.Clr, -relBound, relBound);
+        paramList.emplace_back("aero_rate_yaw", "Cnr", kiteProps.Aerodynamics.Cnr, -relBound, relBound);
+
+
+        /* Rudder */
+        paramList.emplace_back("aero_ctrl_rud", "CYdr", kiteProps.Aerodynamics.CYdr, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_rud", "Cldr", kiteProps.Aerodynamics.Cldr, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_rud", "Cndr", kiteProps.Aerodynamics.Cndr, -relBound, relBound);
+        // 12 lateral/rudder parameters
+
     }
 
-    if (kite_utils::file_exists(flightDataPath + "id_lam_g.txt")) {
-        ARG["lam_g0"] = kite_utils::read_from_file(flightDataPath + "id_lam_g.txt");
-    } else {
-        ARG["lam_g0"] = solution.at("lam_g");
-    }
-
-    if (kite_utils::file_exists(flightDataPath + "id_lam_x.txt")) {
-        DM sol_lam_x = kite_utils::read_from_file(flightDataPath + "id_lam_x.txt");
-        ARG["lam_x0"] = DM::vertcat({sol_lam_x, DM::zeros(REF_P.size1())});
-    } else {
-        ARG["lam_x0"] = DM::vertcat({solution.at("lam_x"), DM::zeros(REF_P.size1())});
-    }
-
-//    /** write initial trajectory to a file */
-//    std::ofstream trajectory_file(flightDataPath + "integrated_trajectory.txt", std::ios::out);
-//    if (!trajectory_file.fail()) {
-//        for (int i = 0; i < varx.size1(); i = i + 13) {
-//            std::vector<double> tmp = feasible_state(Slice(i, i + 13), 0).nonzeros();
-//            for (uint j = 0; j < tmp.size(); j++) {
-//                trajectory_file << tmp[j] << " ";
-//            }
-//            trajectory_file << "\n";
-//        }
-//    }
-//    trajectory_file.close();
-
-    int idx_in = num_segments * poly_order * dimx;
-    int idx_out = idx_in + dimx;
-    ARG["lbx"](Slice(idx_in, idx_out), 0) = init_state;
-    ARG["ubx"](Slice(idx_in, idx_out), 0) = init_state;
-
-    /** solve the identification problem */
-    DMDict res = NLP_Solver(ARG);
-    DM result = res.at("x");
-    DM lam_x = res.at("lam_x");
-
-    DM new_params = result(Slice(result.size1() - varp.size1(), result.size1()));
-    DM param_sens = lam_x(Slice(lam_x.size1() - varp.size1(), lam_x.size1()));
-
-    std::cout << "PARAMETER SENSITIVITIES: " << param_sens << "\n";
-
-    std::vector<double> new_params_vec = new_params.nonzeros();
-
-//    DM trajectory = result(Slice(0, varx.size1()));
-//    //DM trajectory = DM::reshape(traj, DATA_POINTS, dimx );
-//    std::ofstream est_trajectory_file(flightDataPath + "estimated_trajectory.txt", std::ios::out);
+//    else if (identMode == KiteDynamics::COMPLETE) {
 //
-//    if (!est_trajectory_file.fail()) {
-//        for (int i = 0; i < trajectory.size1(); i = i + dimx) {
-//            std::vector<double> tmp = trajectory(Slice(i, i + dimx), 0).nonzeros();
-//            for (uint j = 0; j < tmp.size(); j++) {
-//                est_trajectory_file << tmp[j] << " ";
-//            }
-//            est_trajectory_file << "\n";
-//        }
+//        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -0.5, 0.7);
+//
+//        /* AOA */
+//        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -0.1, 0.5);
+//        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -0.05, 0.1);
+//
+//        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.5, 0.5);
+//        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -0.1, 0.3);
+//
+//        /* Sideslip */
+//        paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -0.5, 0.5);
+//
+//        paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb, -0.5, 0.5);
+//
+//        paramList.emplace_back("aero_ss", "Cnb", kiteProps.Aerodynamics.Cnb, -0.5, 0.5);
+//
+//
+//        /* Pitchrate */
+//        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -0.5, 0.5);
+//        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -0.3, 0.3);
+//
+//        /* Rollrate */
+//        paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -0.5, 0.5);
+//        paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -0.5, 0.5);
+//        paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -0.3, 1.0);
+//
+//        /* Yawrate */
+//        paramList.emplace_back("aero_rate_yaw", "CYr", kiteProps.Aerodynamics.CYr, -0.3, 0.3);
+//        paramList.emplace_back("aero_rate_yaw", "Clr", kiteProps.Aerodynamics.Clr, -0.5, 0.5);
+//        paramList.emplace_back("aero_rate_yaw", "Cnr", kiteProps.Aerodynamics.Cnr, -0.3, 1.0);
+//
+//
+//        /* Elevator */
+//        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -0.5, 0.5);
+//        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -0.5, 0.5);
+//
+//        /* Ailerons */
+//        paramList.emplace_back("aero_ctrl_ail", "Clda", kiteProps.Aerodynamics.Clda, -0.5, 0.5);
+//        paramList.emplace_back("aero_ctrl_ail", "Cnda", kiteProps.Aerodynamics.Cnda, -0.5, 1.5);
+//        // 21 complete parameters
+//
+////        /* Rudder */
+////        paramList.emplace_back("aero_ctrl_rud", "CYdr", kiteProps.Aerodynamics.CYdr, -0.5, 0.5);
+////        paramList.emplace_back("aero_ctrl_rud", "Cldr", kiteProps.Aerodynamics.Cldr, -0.5, 0.5);
+////        paramList.emplace_back("aero_ctrl_rud", "Cndr", kiteProps.Aerodynamics.Cndr, -0.5, 0.5);
 //    }
-//    est_trajectory_file.close();
+
+    LBP = REF_P = UBP = DM::zeros(paramList.size());
+
+    /* Numerize parameters and fill bounds */
+    int i = 0;
+    for (Parameter &param : paramList) {
+        param.id = i;
+        UBP(i) = param.upperBound;
+        REF_P(i) = param.refValue;
+        LBP(i) = param.lowerBound;
+
+        ++i;
+    }
+
+    //    std::cout << "Upper Bound: " << UBP << "\n"
+    //              << "Ref value  : " << REF_P << "\n"
+    //              << "Lower bound: " << LBP << "\n";
+}
+
+void get_optimizationVarBounds(const DM &LBX, const DM &UBX, const int &num_segments, const int &poly_order,
+                               const DM &LBU, const DM &UBU,
+                               const DM &LBP, const DM &UBP,
+
+                               SX &lbx, SX &ubx) {
+
+    /** Optimization variable bounds (inequality (box) constraints) **/
+    /* Add state bounds for each DATA_POINT (replicate vector for one DATA_POINT) */
+    lbx = SX::repmat(LBX, num_segments * poly_order + 1, 1);
+    ubx = SX::repmat(UBX, num_segments * poly_order + 1, 1);
+
+    /* Add control bounds for each DATA_POINT (entirely from DATA)) */
+    lbx = SX::vertcat({lbx, LBU});
+    ubx = SX::vertcat({ubx, UBU});
+
+    /* Add parameter bounds (once) */
+    lbx = SX::vertcat({lbx, LBP});
+    ubx = SX::vertcat({ubx, UBP});
+}
+
+
+/* Data out*/
+void write_parameterFile(const std::string &kite_params_in_filepath, const std::list<Parameter> &paramList,
+                         const std::string &kite_params_out_filepath) {
 
     /** update parameter file */
-    YAML::Node config = YAML::LoadFile(kite_params_file);
+    YAML::Node kite_params_yaml = YAML::LoadFile(kite_params_in_filepath);
 
-    /** LONGITUDINAL IDENTIFICATION PARAMETERS ---------------------------------------------------------------------- */
-    if (flight.maneuver == "identPitch") {
-        config["geometry"]["imu_pitch_offs_deg"] = new_params_vec[0] * 180.0 / M_PI;
-
-        config["aerodynamic"]["CL0"] = new_params_vec[1];
-        config["aerodynamic"]["CLa_total"] = new_params_vec[2];
-
-        config["aerodynamic"]["CD0_total"] = new_params_vec[3];
-        config["aerodynamic"]["Cm0"] = new_params_vec[4];
-        config["aerodynamic"]["Cma"] = new_params_vec[5];
-
-        config["aerodynamic"]["CLq"] = new_params_vec[6];
-        config["aerodynamic"]["Cmq"] = new_params_vec[7];
-
-        config["aerodynamic"]["CLde"] = new_params_vec[8];
-        config["aerodynamic"]["Cmde"] = new_params_vec[9];
+    for (auto &param : paramList) {
+        kite_params_yaml[param.groupName][param.name] = param.foundValue;
     }
-    /** END OF LONGITUDINAL IDENTIFICATION PARAMETERS --------------------------------------------------------------- */
 
-    /** LATERAL IDENTIFICATION PARAMETERS --------------------------------------------------------------------------- */
-    if (flight.maneuver == "identRoll") {
-        config["aerodynamic"]["CYb"] = new_params_vec[0];
-        config["aerodynamic"]["Cn0"] = new_params_vec[1];
-        config["aerodynamic"]["Cnb"] = new_params_vec[2];
-        config["aerodynamic"]["Clb"] = new_params_vec[3];
+    std::ofstream fout(kite_params_out_filepath);
+    fout << kite_params_yaml;
+}
 
-        config["aerodynamic"]["CYr"] = new_params_vec[4];
-        config["aerodynamic"]["Cnr"] = new_params_vec[5];
-        config["aerodynamic"]["Clr"] = new_params_vec[6];
-        config["aerodynamic"]["CYp"] = new_params_vec[7];
-        config["aerodynamic"]["Clp"] = new_params_vec[8];
-        config["aerodynamic"]["Cnp"] = new_params_vec[9];
+void write_trajectoryFile(const DM &traj, const std::string &filepath) {
 
-        config["aerodynamic"]["CYdr"] = new_params_vec[10];
-        config["aerodynamic"]["Cndr"] = new_params_vec[11];
-        config["aerodynamic"]["Cldr"] = new_params_vec[12];
-        config["aerodynamic"]["Clda"] = new_params_vec[13];
-        config["aerodynamic"]["Cnda"] = new_params_vec[14];
+    std::ofstream traj_file(filepath, std::ios::out);
+    traj_file.precision(15);
+
+    for (int iTimeStep = 0; iTimeStep < traj.size2(); ++iTimeStep) {
+        for (int jState = 0; jState < traj.size1(); ++jState) {
+            traj_file << static_cast<double>(traj(jState, iTimeStep));
+            if (jState < traj.size1() - 1) { traj_file << " "; }
+        }
+        traj_file << "\n";
     }
-    /** END OF LATERAL IDENTIFICATION PARAMETERS -------------------------------------------------------------------- */
 
-    // config["tether"]["length"] = new_params_vec[23];
-    // config["tether"]["Ks"] = new_params_vec[24];
-    // config["tether"]["Kd"] = new_params_vec[25];
-    // config["tether"]["rx"] = new_params_vec[26];
-    // config["tether"]["rz"] = new_params_vec[27];
+    traj_file.close();
+}
 
-    std::ofstream fout(flightDataPath + "eg4_after_" + flight.maneuver + ".yaml");
-    fout << config;
+void write_optResultsFile(const DM &optResult_x, const DM &optResult_lam_x, const DM &optResult_lam_g,
+                          const std::string &filepath) {
+
+    std::ofstream optRes_file(filepath, std::ios::out);
+    optRes_file.precision(15);
+
+    optRes_file << "optResult_x: ";
+    for (int i = 0; i < optResult_x.size1() - 1; i++) {
+        optRes_file << optResult_x(i) << " ";
+    }
+    optRes_file << optResult_x(optResult_x.size1() - 1) << "\n";
+
+    optRes_file << "optResult_lam_x: ";
+    for (int i = 0; i < optResult_lam_x.size1() - 1; i++) {
+        optRes_file << optResult_lam_x(i) << " ";
+    }
+    optRes_file << optResult_lam_x(optResult_lam_x.size1() - 1) << "\n";
+
+    optRes_file << "optResult_lam_g: ";
+    for (int i = 0; i < optResult_lam_g.size1() - 1; i++) {
+        optRes_file << optResult_lam_g(i) << " ";
+    }
+    optRes_file << optResult_lam_g(optResult_lam_g.size1() - 1);
+
+    optRes_file.close();
+}
+
+void print_singleParameterOutput(const int paramNumber, const std::string &paramName,
+                                 const double &paramFound, const double &param_LB, const double &param_UB,
+                                 const double &param_sens, const double &sensitivity_max,
+                                 const double &lagrangeScore = 0) {
+
+    const int p = 4;
+    const int w = 1 + 2 + 1 + p; // minus, 2 digits, decimal, 4 digits
+
+    /* Write line */
+    std::cout << std::fixed << std::setprecision(p);
+    std::cout << std::left;
+
+    std::cout << "(" << std::setw(2) << std::right << paramNumber << std::left << ")"
+              << " "
+              << std::setw(9) << paramName
+              << " = "
+              << std::setw(w) << std::right << paramFound << std::left;
+
+    { /* Bound visualization ---------------------------------------------------------------------------------------- */
+
+        /* Lower bound */
+        std::cout << std::setw(4) << " "
+                  << std::setw(w) << std::right << param_LB
+                  << " |";
+
+        { /* Body */
+
+            int nBins = 40;
+            double percentagePositionWithinBounds = (paramFound - param_LB) / (param_UB - param_LB);
+            int intPositionWithinBounds = static_cast<int>(std::round(percentagePositionWithinBounds * nBins - 0.5));
+
+            if (intPositionWithinBounds <= -1) intPositionWithinBounds = 0;
+            if (intPositionWithinBounds >= nBins) intPositionWithinBounds = nBins - 1;
+            for (int i = 0; i < nBins; ++i) {
+                if (i == intPositionWithinBounds)
+                    std::cout << "X";
+                else if (i == (nBins / 2))
+                    std::cout << "|";
+                else
+                    std::cout << "-";
+            }
+        }
+
+        /* Upper bound */
+        std::cout << "| " << std::setw(w) << param_UB;
+    }
+
+    std::cout << std::setw(4) << "";
+
+    { /* Sensitivity visualization ---------------------------------------------------------------------------------- */
+
+        /* Lower bound */
+        std::cout << std::setw(w) << std::right << "0"
+                  << " |";
+
+        /* Body */
+        int nBins = 40;
+        double percentagePositionWithinBounds = param_sens / sensitivity_max;
+        int intPositionWithinBounds = static_cast<int>(std::round(percentagePositionWithinBounds * nBins - 0.5));
+
+        if (intPositionWithinBounds <= -1) intPositionWithinBounds = 0;
+        if (intPositionWithinBounds >= nBins) intPositionWithinBounds = nBins - 1;
+        for (int i = 0; i < nBins; ++i) {
+            if (i == intPositionWithinBounds)
+                std::cout << "X";
+            else
+                std::cout << "-";
+        }
+
+        /* Upper bound */
+        std::cout << "> " << std::setw(w) << param_sens;
+
+
+    }
+    std::cout << "\n";
+}
+
+void printWrite_parametersFound(std::list<Parameter> &paramList, const double &fitting_error_evaluated,
+                                const std::string &solve_status,
+                                const std::string &filepath) {
+
+    /* Sort parameter list by sensitivity */
+    paramList.sort();
+
+    double sensitivity_max = paramList.begin()->sensitivity;
+
+    /* Header */
+    std::cout << "\n";
+    std::cout << std::left;
+    std::cout << std::setw(4) << "No."
+              << " "
+              << std::setw(9) << "Name"
+              << "   "
+              << std::setw(8) << "Value"
+
+              << std::setw(4) << ""
+
+              << std::setw(8) << "Lw.Bound"
+              << "  "
+              << std::setw(40) << "Value position in bounds"
+              << "  "
+              << std::setw(8) << "Up.Bound"
+
+              << std::setw(4) << ""
+
+              << std::setw(8) << ""
+              << "  "
+              << std::setw(40) << "Sensitivity"
+              << "\n";
+
+    /* Print parameter outputs */
+    for (Parameter &param : paramList) {
+        int i = param.id;
+
+        print_singleParameterOutput(i, param.name,
+                                    param.foundValue,
+                                    param.lowerBound,
+                                    param.upperBound,
+                                    param.sensitivity, sensitivity_max);
+    }
+    std::cout << "\nFitting error = " << fitting_error_evaluated << "\n";
+
+
+    /** Save paramInfo file **/
+
+    std::ofstream param_diag_file(filepath, std::ios::out);
+
+    param_diag_file << "ParamId" << " "
+                    << "GroupName" << " "
+                    << "ParamName" << " "
+                    << "ParamValue" << " "
+                    << "LwBound" << " "
+                    << "UpBound" << " "
+                    << "Sensitivity" << " "
+                    << "SolveSucceeded" << " "
+                    << "FittingError" << "\n";
+
+    bool solveSucceeded = (solve_status == "Solve_Succeeded");
+
+    for (Parameter &param : paramList) {
+        int i = param.id;
+
+        param_diag_file << std::fixed << std::setprecision(15);
+
+        param_diag_file << i << " "
+                        << param.groupName << " "
+                        << param.name << " "
+                        << param.foundValue << " "
+                        << param.lowerBound << " "
+                        << param.upperBound << " "
+                        << param.sensitivity << " "
+                        << solveSucceeded << " "
+                        << fitting_error_evaluated << "\n";
+
+    }
+    param_diag_file.close();
+
+}
+
+
+int main() {
+
+    /// 5 lines to adapt by the user =============================================================================== ///
+
+    std::string flightDataDir = "/home/johannes/identification/processed_flight_data/";
+
+    /// State and Control dimensions ///
+    const int dimx = 13;  // v(3) w(3) r(3) q(4)
+
+    const bool controlsIncludeWind = false;
+    const int dimu = 4;   // T elev rud ail + windFrom_deg windSpeed
+
+    /// 1. Identification mode ///
+    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LONGITUDINAL;
+
+    /// 2. lon: 9, lat: 11, yaw: 12, complete: 21 identification parameters ///
+    const int dimp = 9;
+
+    /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
+    // roll / lateral
+//    const int DATA_POINTS = 85;
+//    const int poly_order = 3;
+//    const int num_segments = 28;
+
+    // pitch / longitudinal
+    const int DATA_POINTS = 106;
+    const int poly_order = 3;
+    const int num_segments = 35;
+
+//    // yaw
+//    const int DATA_POINTS = 64;
+//    const int poly_order = 3;
+//    const int num_segments = 21;
+
+    //OptProblemProperties opp(13, 4, 10, 346, 3, 115);
+    //OptProblemProperties opp(dimx, dimu, dimp, DATA_POINTS, poly_order, num_segments);
+
+    const int n_optimizationFailed_max = 3;
+
+    /// ============================================================================================================ ///
+    /* User config check */
+    if (!(
+            (identMode == KiteDynamics::IdentMode::LONGITUDINAL && dimp == 9 && DATA_POINTS == 106)
+            ||
+            (identMode == KiteDynamics::IdentMode::LATERAL && dimp == 11 && DATA_POINTS == 325)
+            ||
+            (identMode == KiteDynamics::IdentMode::LATERAL && dimp == 11 && DATA_POINTS == 85)
+            ||
+            (identMode == KiteDynamics::IdentMode::YAW && dimp == 12 && DATA_POINTS == 64)
+            ||
+            (identMode == KiteDynamics::IdentMode::COMPLETE && dimp == 21 && DATA_POINTS == 106)
+
+
+    )) {
+        std::cout << "Identification mode/dimp/DATA_POINTS mismatch. Check user config!\n";
+        return EXIT_FAILURE;
+    }
+
+    std::string identManeuver;
+    if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
+        identManeuver = "identPitch";
+    } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
+        identManeuver = "identRoll";
+    } else if (identMode == KiteDynamics::IdentMode::YAW) {
+        identManeuver = "identYaw";
+    }
+
+    std::cout << "\nRunning " << identManeuver << " identification of " << dimp << " parameters with "
+              << DATA_POINTS << " data points.\n";
+
+    /* Load identification schedule */
+    std::vector<FlightMetaData> flights = readIn_identSchedule(flightDataDir, identManeuver);
+
+    /* Cost matrix */
+    DM Q;
+    get_costMatrix(identMode,
+
+                   Q);
+
+    /* State bounds (constant over all sequences and iterations) */
+    DM UBX = DM::vertcat({45, 10, 10,
+                          4 * M_PI, 4 * M_PI, 4 * M_PI,
+                          300, 300, 0,
+                          1.05, 1.05, 1.05, 1.05});
+
+    DM LBX = DM::vertcat({2.0, -10, -10,
+                          -4 * M_PI, -4 * M_PI, -4 * M_PI,
+                          -300, -300, -300,
+                          -1.05, -1.05, -1.05, -1.05});     // for infinity use -DM::inf(1) and DM::inf(1)
+
+    /** Collocation **/
+    Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
+
+    /* Vectors, length: states * collocation points */
+    SX varx = spectral.VarX();
+    SX varu = spectral.VarU();
+    SX varp = spectral.VarP();
+
+    /* Optimization variable contains
+     * states at each DATA_POINT
+     * controls at each DATA_POINT
+     * parameters */
+    SX opt_var = SX::vertcat(SXVector{varx, varu, varp});
+
+    /** Sequence loop ============================================================================================== **/
+    for (const auto &flight : flights) {
+
+        /* Print current sequence */
+        std::cout << std::left
+                  << "\n---------------------------------------------------------"
+                  << "\nData: "
+                  << flight.session << "-" << flight.number << "-" << flight.seq
+                  << " (Session-Flight-Sequence)\n";
+
+
+        /* Construct sequence directory path */
+        std::string seq_dir;
+        get_seqDir(flightDataDir, identManeuver, flight,
+
+                   seq_dir);
+        std::cout << "Directory: " << seq_dir << "\n";
+
+
+        /** Read in all sequence data **/
+        DM id_time;
+        DM id_states_woTime;
+        DM id_controls_rev_woTime;
+
+        int windFrom_deg{0};
+        double windSpeed{0};
+        double tf{0};
+
+        std::string kite_baseParams_dir;
+        std::string kite_baseParams_filename;
+        int nIt{0};
+        bool kite_params_warmStart{false};
+
+
+        readIn_sequenceData(seq_dir, flight, dimx, dimu, DATA_POINTS,
+
+                            id_time, id_states_woTime, id_controls_rev_woTime,
+                            windFrom_deg, windSpeed, tf,
+                            kite_baseParams_dir, kite_baseParams_filename, nIt, kite_params_warmStart);
+
+
+        /** Initial state: First column of id_states **/
+        DM id_state0 = id_states_woTime(Slice(0, dimx), 0);
+
+        /** Control bounds **/
+        /* (for all DATA_POINTs)
+         * lower bound = control value = upper bound, using controls as optimization input */
+        DM LBU, UBU;
+        LBU = UBU = DM::vec(id_controls_rev_woTime);
+
+        /** Fitting error **/
+        SX varx_ = SX::reshape(varx, dimx, DATA_POINTS);
+        SX fitting_error = 0;
+        for (uint jTimeStep = 0; jTimeStep < DATA_POINTS; ++jTimeStep) {
+
+            /* Measured and to be optimized state at one DATA_POINT */
+            SX measured_state = id_states_woTime(Slice(0, dimx), jTimeStep);
+            SX state_to_optimize = varx_(Slice(0, dimx), DATA_POINTS - jTimeStep - 1); // time-reverse
+
+            /* Error and sum up */
+            SX error = measured_state - state_to_optimize;
+            fitting_error += static_cast<double>(1.0 / DATA_POINTS) * SX::sum1(SX::mtimes(Q, pow(error, 2)));
+
+        }
+        Function fitting_error_func = Function("fitting_error", {varx_}, {fitting_error});
+
+
+        /** Kite Dynamics based on baseParams and current sequence's wind conditions **/
+        /* Get KiteDynamics based on constant (during optimization) parameters.
+         * Parameters to be optimized parameters are read in for each iteration. */
+        std::string kite_params_in_filepath = kite_baseParams_dir + kite_baseParams_filename + ".yaml";
+        std::cout << "Base params: " << kite_params_in_filepath << "\n";
+
+        KiteDynamics kite, kite_int;
+        get_kiteDynamics(kite_params_in_filepath, windFrom_deg, windSpeed, identMode, controlsIncludeWind,
+
+                         kite, kite_int);
+
+        Function DynamicsFunc = kite.getNumericDynamics();
+        //SX X = kite.getSymbolicState();
+        //SX U = kite.getSymbolicControl();
+        SX P = kite.getSymbolicParameters();
+
+        Function ode = kite_int.getNumericDynamics();
+
+        SX diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
+        diff_constr = diff_constr(Slice(0, num_segments * poly_order * dimx));
+
+
+        /** Create solver **/
+        Function nlp_solver_func;
+        create_nlpSolver(opt_var, fitting_error, diff_constr,
+
+                         nlp_solver_func);
+
+        std::cout << "OK: Solver set up\n";
+
+
+        /** Ident iteration loop =================================================================================== **/
+        /* Print current sequence id (session/flight/seq */
+        std::cout << "Running " << nIt << " iteration(s) on base parameters: " << kite_baseParams_filename << "\n";
+
+        std::string kite_params_out_filepath;
+        bool status_optimalSolutionFound{false};
+        DM optResult_x;
+        DM optResult_lam_x;
+        DM optResult_lam_g;
+
+        int i_optimization_failed{0};
+
+        for (int iIt = 0; iIt < nIt; ++iIt) {
+
+            /** Select parameter IN file for current iteration **/
+            if (iIt > 0) {
+                /* There was an iteration before, use iterated param file. */
+                kite_params_in_filepath = kite_params_out_filepath;
+            }
+
+            /* Parameter out filepath after this iteration */
+            std::string kite_params_out_dir = seq_dir + "params_new/" + kite_baseParams_filename + "/";
+            std::string afterItStr = "afterIt_" + std::to_string(iIt + 1);
+            kite_params_out_filepath = kite_params_out_dir + afterItStr + ".yaml";
+
+            std::string optResults0_filepath = kite_params_out_dir + "optResults_0.txt";
+
+            if (kite_params_warmStart && kite_utils::file_exists(kite_params_out_filepath)) {
+                /* Skip this loop, as it has already been done. */
+                std::cout << "\nSkipping parameter iteration " << iIt + 1 << " (already done).\n";
+                continue;
+            } /* Start iterated optimization from here. */
+
+            std::cout << "\nParameter iteration " << iIt + 1 << "\n";
+
+            std::cout << "Kite param file IN: " << kite_params_in_filepath << "\n";
+            KiteProperties kite_props_in = kite_utils::LoadProperties(kite_params_in_filepath);
+
+            /* Parameter bounds */
+            /* (For each DATA_POINT) */
+            DM REF_P;   // Parameter initial values
+            DM LBP;     // Parameter lower bounds
+            DM UBP;     // Parameter upper bounds
+
+            std::list<Parameter> paramList; // List to map parameter id and name to sort them by sensitivity later
+
+            setup_optimizationParameters(kite_props_in, identMode,
+
+                                         REF_P, LBP, UBP, paramList);
+
+            std::cout << "Parameter preparation OK\n";
+
+
+            /** set default args */
+            DMDict ARG;
+            SX lbx, ubx;
+
+            get_optimizationVarBounds(LBX, UBX, num_segments, poly_order,
+                                      LBU, UBU,
+                                      LBP, UBP,
+
+                                      lbx, ubx);
+
+            SX lbg = SX::zeros(diff_constr.size());
+            SX ubg = SX::zeros(diff_constr.size());
+
+
+            /* Feasible optimization variable guess  */
+            DM feasible_state;
+
+            DMDict feasible_guess;
+
+            if (optResult_x.is_empty()) {
+                if (kite_utils::file_exists(optResults0_filepath)) {
+                    /* Guess is available from file */
+                    std::cout << "Using initial guess from previous optimization (file).\n";
+
+                    optResult_x = optResult_lam_x = DM::zeros(opt_var.size1());
+                    optResult_lam_g = DM::zeros(diff_constr.size1());
+
+                    readin_optResultsFile(optResults0_filepath,
+
+                                          optResult_x, optResult_lam_x, optResult_lam_g);
+
+                } else {
+                    /* Provide initial guess from integrator by flying at constant control input */
+                    std::cout << "Computing initial guess from integrator.\n";
+
+                    casadi::DMDict props;
+                    props["scale"] = 0;
+                    props["P"] = casadi::DM::diag(casadi::DM(
+                            {0.1, 1 / 3.0, 1 / 3.0,
+                             1 / 2.0, 1 / 5.0, 1 / 2.0,
+                             1 / 3.0, 1 / 3.0, 1 / 3.0,
+                             1.0, 1.0, 1.0, 1.0}));
+                    PSODESolver<poly_order, num_segments, dimx, dimu> ps_solver(ode, tf, props);
+
+                    DM init_control;
+                    if (controlsIncludeWind)
+                        init_control = DM({0.1, 0.0, 0.0, 0.0, 180.0, 0.5});
+                    else
+                        init_control = DM({0.1, 0.0, 0.0, 0.0});
+
+                    std::cout << "init_state: " << id_state0 << ", constant control: " << init_control << "\n";
+
+                    init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
+
+                    feasible_guess = ps_solver.solve_trajectory(id_state0, init_control, true);
+
+                    DM feasible_traj = feasible_guess.at("x");
+                    optResult_x = casadi::DM::vertcat({feasible_traj, REF_P});
+                    optResult_lam_x = DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())});
+                    optResult_lam_g = feasible_guess.at("lam_g");
+                    std::cout << "Initial guess found.\n";
+                }
+            }
+
+            /* Use trajectory from previous iteration as initial feasible guess for this iteration */
+            ARG["x0"] = optResult_x;
+            ARG["lam_x0"] = optResult_lam_x;
+            ARG["lam_g0"] = optResult_lam_g;
+
+            /* Set initial state
+             * As the problem is formulated time-reverse, the position of the initial state
+             * in the optimization variable vector is at the end of the states. */
+            int idx_in = num_segments * poly_order * dimx;
+            int idx_out = idx_in + dimx;
+            lbx(Slice(idx_in, idx_out), 0) = id_state0;
+            ubx(Slice(idx_in, idx_out), 0) = id_state0;
+
+            /** Solve the optimization problem ===================================================================== **/
+            std::cout << "\nSolving the optimization problem ...\n";
+
+            ARG["lbx"] = lbx;
+            ARG["ubx"] = ubx;
+            ARG["lbg"] = lbg;
+            ARG["ubg"] = ubg;
+
+            DMDict res = nlp_solver_func(ARG);
+
+            /* Check if optimization failed. */
+            Dict stats = nlp_solver_func.stats();
+            std::string solve_status = static_cast<std::string>(stats["return_status"]);
+
+            if (solve_status == "Invalid_Number_Detected" ||
+                solve_status == "Infeasible_Problem_Detected" ||
+                solve_status == "Restoration_Failed") { ++i_optimization_failed; }
+
+            /* Save results for next iteration */
+            optResult_x = res.at("x");
+            optResult_lam_x = res.at("lam_x");
+            optResult_lam_g = res.at("lam_g");
+
+            /** Output ============================================================================================= **/
+            /* Get found parameter values and sensitivities from optimization result and write to paramList */
+            DM new_params = optResult_x(Slice(optResult_x.size1() - varp.size1(), optResult_x.size1()));
+            DM param_sens = optResult_lam_x(Slice(optResult_lam_x.size1() - varp.size1(), optResult_lam_x.size1()));
+
+            for (auto &param : paramList) {
+                param.foundValue = static_cast<double>(new_params(param.id));
+                param.sensitivity = std::abs(static_cast<double>(param_sens(param.id)));
+            }
+
+            /* Time-reverse trajectory from optimization result, reshape, reverse time */
+            DM est_traj_rev_vect = optResult_x(Slice(0, varx.size1()));
+            DM est_traj_rev_woTime = DM::reshape(est_traj_rev_vect, dimx, DATA_POINTS);
+            DM est_traj_woTime = flipDM(est_traj_rev_woTime, 2);
+
+            /* Now: Rows: States, Columns: Time steps
+             * Add original times as first row */
+            DM est_traj_wTime = DM::vertcat({id_time, est_traj_woTime});
+
+            /* Calculate fitting error (cost function) using time-reverse trajectory */
+            double fitting_error_evaluated = static_cast<double>(fitting_error_func(DMVector{est_traj_rev_woTime})[0]);
+
+            std::cout << "\n\nIteration " << iIt + 1 << " result:\n";
+
+            /** Write estimated trajectory to file **/
+            std::string est_traj_filepath = kite_params_out_dir + afterItStr + "_estimatedTrajectory.txt";
+            write_trajectoryFile(est_traj_wTime, est_traj_filepath);
+
+            /** Write new parameters to YAML file **/
+            write_parameterFile(kite_params_in_filepath, paramList, kite_params_out_filepath);
+
+            /** Visualize new parameters within their bounds and write to paramInfo file **/
+            std::string paramInfo_filepath = kite_params_out_dir + afterItStr + "_paramInfo.txt";
+            printWrite_parametersFound(paramList, fitting_error_evaluated, solve_status, paramInfo_filepath);
+
+            /** Write optimization results to file for possible warm start **/
+            write_optResultsFile(optResult_x, optResult_lam_x, optResult_lam_g, optResults0_filepath);
+
+
+            /* Check on max iteration steps */
+            if (i_optimization_failed >= n_optimizationFailed_max) {
+                std::cout << "Optimization failed to many times. Stopping iterations on this sequence. \n";
+                iIt = nIt;
+                continue;
+            }
+        } /** End of ident iteration loop -------------------------------------------------------------------------- **/
+
+    } /** End of sequence loop ------------------------------------------------------------------------------------- **/
 
 }

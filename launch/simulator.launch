@@ -1,9 +1,23 @@
 <launch>
+
+    <arg name="filepath_kiteParams" default="/home/johannes/identification/eg4_xflr.yaml" />
+
+    <arg name="windFrom_deg" default="135.0" />
+    <arg name="windSpeed"    default="0.0" />
+
     <node pkg="openkite" type="simulator" name="simulator" output="screen">
-        <!-- Initial state:           v......., rates.., pos......., attQuat... -->
-        <rosparam param="init_state">[15, 0, 0,  0, 0, 0,  0, 0, -10,  0.38268, 0, 0, 0.92388]</rosparam>
-        <param name="kite_params" value="/home/johannes/identification/eg4.yaml"/>
+        <!-- Initial state: velocity (body), rates (body), position, quaternion from NED to body
+                Initial state:           v.......,  rates.., pos.......,  attQuat... -->
+        <rosparam param="init_state"> [15, 0, 0,  0, 0, 0,  0, 0, -2,  0.38268, 0, 0, 0.92388] </rosparam>
+
+        <param name="kite_params" value="$(arg filepath_kiteParams)"/>
+
+        <param name="windFrom_deg" value="$(arg windFrom_deg)" />
+        <param name="windSpeed"    value="$(arg windSpeed)" />
     </node>
+
     <node pkg="openkite" type="kite_visualization_node" name="visualisation_node" output="screen">
+        <param name="windFrom_deg" value="$(arg windFrom_deg)" />
+        <param name="windSpeed"    value="$(arg windSpeed)" />
     </node>
 </launch>
