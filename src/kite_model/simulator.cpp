@@ -56,6 +56,10 @@ void Simulator::simulate()
     Dict p = m_odeSolver->getParams();
     double dt = p["tf"];
 
+    /* Make sure thrust is not negative */
+    if (static_cast<double>(controls(0)) < 0.0)
+        controls(0) = 0.0;
+
     /* Get specific nongravitational force before solving (altering) the state */
     DM dynamics_evaluated = m_NumericSpecNongravForce(DMVector{state, controls})[0];
     DM vdot = dynamics_evaluated(Slice(0, 3));
