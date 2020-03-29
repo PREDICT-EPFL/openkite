@@ -65,9 +65,9 @@ struct Parameter {
     int id{0};
     const std::string groupName;
     const std::string name;
-    const double refValue{};
-    const double lowerBound{};
-    const double upperBound{};
+    double refValue{};
+    double lowerBound{};
+    double upperBound{};
 
     double foundValue{};
     double sensitivity{};
@@ -329,48 +329,100 @@ void readin_optResultsFile(const std::string &filepath,
 
 
 /* Set up */
-void get_costMatrix(const KiteDynamics::IdentMode identMode,
+void get_costMatrix(const KiteDynamics::IdentMode identMode, bool useEulerAngles,
 
                     DM &Q) {
 
-    /* Default */
-    Q = SX::diag(SX({100, 100, 100,   // vx vy vz
-                     200, 200, 200,   // wx wy wz
-                     10, 10, 10,       // x y z
-                     100, 100, 100, 100})); //qw qx qy qz
+    if (useEulerAngles) {
 
-    if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
+        /* Default */
+        Q = SX::diag(SX({100, 100, 100,   // vx vy vz
+                         200, 200, 200,   // wx wy wz
+                         10, 10, 10,       // x y z
+                         100, 100, 100})); //roll pitch yaw
 
-//        Q = SX::diag(SX({100, 100, 100,   // vx vy vz
-//                         200, 200, 200,   // wx wy wz
-//                         10, 10, 10,   // x y z
-//                         100, 100, 100, 100}));   //qw qx qy qz
+        if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
 
-    } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
+            Q = SX::diag(SX({10, 10, 100,       // vx vy vz
+                             10, 200, 10,      // wx wy wz
+                             10, 10, 100,       // x y z
+                             10, 200, 10}));     //roll pitch yaw
 
-//        Q = SX::diag(SX({0, 100, 0,   // vx vy vz
-//                         200, 0, 200,   // wx wy wz
-//                         50, 50, 0,   // x y z
-//                         100, 100, 100, 100})); //qw qx qy qz
+        } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
 
-    } else if (identMode == KiteDynamics::IdentMode::YAW) {
+            Q = SX::diag(SX({10, 300, 10,   // vx vy vz
+                             1000, 100, 300,   // wx wy wz
+                             10, 10, 100,   // x y z
+                             10, 10, 10}));   //roll pitch yaw
 
-        /* Use default */
+        } else if (identMode == KiteDynamics::IdentMode::YAW) {
 
+            Q = SX::diag(SX({500, 500, 10,   // vx vy vz
+                             300, 100, 1000,   // wx wy wz
+                             10, 10, 500,   // x y z
+                             10, 10, 10}));   //roll pitch yaw
+
+        } else {
+
+            Q = SX::diag(SX::ones(12) * 100);
+        }
 
     } else {
+        /* Default */
+        Q = SX::diag(SX({100, 100, 100,   // vx vy vz
+                         200, 200, 200,   // wx wy wz
+                         10, 10, 10,       // x y z
+                         100, 100, 100, 100})); //qw qx qy qz
 
-        Q = SX::diag(SX::ones(13) * 100);
+        if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
+
+//        /** Step 1: Identify coefficients to pitch torque (pitchrate) **/
+//        Q = SX::diag(SX({10, 10, 10,   // vx vy vz
+//                         10, 1000, 10,   // wx wy wz
+//                         10, 10, 10,   // x y z
+//                         10, 10, 10, 10}));   //qw qx qy qz
+
+            /** Step 2: Identify coefficients to Lift **/
+            Q = SX::diag(SX({100, 10, 100,   // vx vy vz
+                             10, 100, 10,   // wx wy wz
+                             10, 10, 10,   // x y z
+                             10, 10, 100, 10}));   //qw qx qy qz
+
+        } else if (identMode == KiteDynamics::IdentMode::LATERAL) {
+
+            Q = SX::diag(SX({10, 100, 10,   // vx vy vz
+                             100, 10, 100,   // wx wy wz
+                             10, 10, 10,   // x y z
+                             10, 10, 10, 10}));   //qw qx qy qz
+
+        } else if (identMode == KiteDynamics::IdentMode::YAW) {
+
+            Q = SX::diag(SX({100, 50, 10,   // vx vy vz
+                             100, 10, 100,   // wx wy wz
+                             10, 10, 10,   // x y z
+                             10, 10, 10, 10}));   //qw qx qy qz
+
+        } else {
+
+            Q = SX::diag(SX::ones(13) * 100);
+        }
     }
+
+    /* Scaling */
+    SX ScalingMat = SX::diag(SX({1.0/20, 1.0/3, 1.0/5,   // vx vy vz
+                                 1.0/3.14, 1.0/3.14, 1.0/3.14,   // wx wy wz
+                                 1.0/30, 1.0/30, 1.0/30,   // x y z
+                                 1.0/1, 1.0/1, 1.0/1, 1.0/1}));   //qw qx qy qz
+
+    Q = SX::mtimes(ScalingMat, Q);
 
 }
 
-void get_kiteDynamics(const std::string &filepath, const double windFrom_deg, const double windSpeed,
+void get_kiteDynamics(KiteProperties &kite_props, const double &windFrom_deg, const double &windSpeed,
                       const KiteDynamics::IdentMode &identMode, const bool controlsIncludeWind,
 
                       KiteDynamics &kite, KiteDynamics &kite_int) {
 
-    KiteProperties kite_props = kite_utils::LoadProperties(filepath);
     kite_props.Wind.WindFrom_deg = windFrom_deg;
     kite_props.Wind.WindSpeed = windSpeed;
 
@@ -380,6 +432,25 @@ void get_kiteDynamics(const std::string &filepath, const double windFrom_deg, co
 
     kite = KiteDynamics(kite_props, algo_props, identMode, controlsIncludeWind);
     kite_int = KiteDynamics(kite_props, algo_props, controlsIncludeWind); //integration model
+}
+
+void substitute_quat2euler(SX &state) {
+
+    SX qw = state(9);
+    SX qx = state(10);
+    SX qy = state(11);
+    SX qz = state(12);
+
+    /* MATLAB quat2eul function, Copyright 2014-2017 The MathWorks, Inc. */
+    SX aSinInput = -2 * (qx * qz - qw * qy);
+    aSinInput = SX::fmin(aSinInput, 1);
+    aSinInput = SX::fmax(aSinInput, -1);
+
+    SX yaw = atan2(2 * (qx * qy + qw * qz), qw * qw + qx * qx - qy * qy - qz * qz);
+    SX pitch = asin(aSinInput);
+    SX roll = atan2(2 * (qy * qz + qw * qx), qw * qw - qx * qx - qy * qy + qz * qz);
+
+    state = SX::vertcat({state(Slice(0, 9)), roll, pitch, yaw});
 }
 
 void create_nlpSolver(const SX &opt_var, const SX &fitting_error, const SX &diff_constr,
@@ -403,14 +474,66 @@ void create_nlpSolver(const SX &opt_var, const SX &fitting_error, const SX &diff
     nlpSolver = nlpsol("solver", "ipopt", NLP, OPTS);
 }
 
-void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDynamics::IdentMode &identMode,
+void setup_optimizationParameters(const KiteProperties &kiteProps,
+                                  const KiteDynamics::IdentMode &identMode, const bool setBounds,
 
                                   DM &REF_P, DM &LBP, DM &UBP, std::list<Parameter> &paramList) {
 
+    /* Define optimization parameters and their bounds.
+     * If setBounds = false, the relative or absolute bounds set to each parameter will not be written at the end.
+     * They only refer to the first time this function is called and therefore the base kite parameters */
 
     if (identMode == KiteDynamics::LONGITUDINAL) {
 
-        double relBound = 0.5;
+//        /** Step 1: Identify coefficients to pitch torque (pitchrate), CD0 already identified as 0.049053
+//        * (setBounds=true in iteration loop) **/
+//        const double relBound = 0.7;
+
+//        paramList.emplace_back("aero", "CD0", 0.049053, 0, 0);                          // fixed
+//
+//        /* AOA */
+//        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, 0, 0);    // fixed
+//        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, 0, 0);    // fixed
+//
+//        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.03, 0.03, true);
+//        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
+//
+//
+//        /* Pitchrate */
+//        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, 0, 0);     // fixed
+//        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -relBound, relBound);
+//
+//
+//        /* Elevator */
+//        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, 0, 0);    // fixed
+//        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -relBound, relBound);
+//        // 9 longitudinal parameters
+
+//        /** Step 2: Identify coefficients to Lift (setBounds=true in iteration loop) **/
+//        const double relBound = 0.7;
+//
+//        paramList.emplace_back("aero", "CD0", 0.049053, 0, 0); // found
+//
+//        /* AOA */
+//        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
+//        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
+//
+//        paramList.emplace_back("aero_aoa", "Cm0", -0.012613, 0, 0); // found
+//        paramList.emplace_back("aero_aoa", "Cma", -0.36459, 0, 0); // found
+//
+//
+//        /* Pitchrate */
+//        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -relBound, relBound);
+//        paramList.emplace_back("aero_rate_pitch", "Cmq", -0.032684, 0, 0); // found
+//
+//
+//        /* Elevator */
+//        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -relBound, relBound);
+//        paramList.emplace_back("aero_ctrl_elev", "Cmde", -0.19349, 0, 0); // found
+//        // 9 longitudinal parameters
+
+        /** All at once, allowing negative Cm0 (due to high wing setting angle) **/
+        const double relBound = 0.7;
 
         paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -relBound, relBound);
 
@@ -418,7 +541,7 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
         paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
         paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
 
-        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.1, 0.1, true);
+        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.03, 0.03, true);
         paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
 
 
@@ -428,13 +551,13 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
 
 
         /* Elevator */
-        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -0.9, 0.3, true);
+        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -relBound, relBound);
         paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -relBound, relBound);
         // 9 longitudinal parameters
 
     } else if (identMode == KiteDynamics::LATERAL) {
 
-        double relBound = 0.5;
+        double relBound = 0.7;
 
         /* Sideslip */
         paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
@@ -467,7 +590,7 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
 
     } else if (identMode == KiteDynamics::YAW) {
 
-        double relBound = 0.5;
+        double relBound = 0.7;
 
         /* Sideslip */
         paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
@@ -545,23 +668,42 @@ void setup_optimizationParameters(const KiteProperties &kiteProps, const KiteDyn
 ////        paramList.emplace_back("aero_ctrl_rud", "Cndr", kiteProps.Aerodynamics.Cndr, -0.5, 0.5);
 //    }
 
-    LBP = REF_P = UBP = DM::zeros(paramList.size());
 
-    /* Numerize parameters and fill bounds */
-    int i = 0;
-    for (Parameter &param : paramList) {
-        param.id = i;
-        UBP(i) = param.upperBound;
-        REF_P(i) = param.refValue;
-        LBP(i) = param.lowerBound;
+    if (setBounds) {
+        /* Setting bounds for the first time */
+        LBP = REF_P = UBP = DM::zeros(paramList.size());
 
-        ++i;
+        /* Numerize parameters and fill bounds */
+        int i = 0;
+        for (Parameter &param : paramList) {
+            param.id = i;
+            UBP(i) = param.upperBound;
+            REF_P(i) = param.refValue;
+            LBP(i) = param.lowerBound;
+
+            ++i;
+        }
+        std::cout << "Base parameters set.\n";
+
+    } else {
+        /* Reuse bounds from previous iteration (do not overwrite them).  */
+        /* Numerize parameters and fill bounds */
+        int i = 0;
+        for (Parameter &param : paramList) {
+            param.id = i;
+            param.upperBound = UBP(i).nonzeros()[0];
+            REF_P(i) = param.refValue;
+            param.lowerBound = LBP(i).nonzeros()[0];
+
+            ++i;
+        }
     }
 
-    //    std::cout << "Upper Bound: " << UBP << "\n"
-    //              << "Ref value  : " << REF_P << "\n"
-    //              << "Lower bound: " << LBP << "\n";
+//    std::cout << "Upper Bound: " << UBP << "\n"
+//              << "Ref value  : " << REF_P << "\n"
+//              << "Lower bound: " << LBP << "\n";
 }
+
 
 void get_optimizationVarBounds(const DM &LBX, const DM &UBX, const int &num_segments, const int &poly_order,
                                const DM &LBU, const DM &UBU,
@@ -810,56 +952,42 @@ int main() {
 
     /// State and Control dimensions ///
     const int dimx = 13;  // v(3) w(3) r(3) q(4)
+    const bool useEulerAnglesForCostFunction = false;
 
     const bool controlsIncludeWind = false;
     const int dimu = 4;   // T elev rud ail + windFrom_deg windSpeed
 
     /// 1. Identification mode ///
-    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LONGITUDINAL;
-
-    /// 2. lon: 9, lat: 11, yaw: 12, complete: 21 identification parameters ///
-    const int dimp = 9;
-
-    /// 3. Should be constant for sequences of the same maneuver. Get numbers from seqInfo.txt! ///
-    // roll / lateral
-//    const int DATA_POINTS = 85;
+//    // roll / lateral
+//    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LATERAL;
+//    const int dimp = 11;
+//
+//    const int DATA_POINTS = 127;
 //    const int poly_order = 3;
-//    const int num_segments = 28;
+//    const int num_segments = 42;
 
-    // pitch / longitudinal
+
+//    // pitch / longitudinal
+//    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::LONGITUDINAL;
+//    const int dimp = 9;
+//
+//    const int DATA_POINTS = 148;
+//    const int poly_order = 3;
+//    const int num_segments = 49;
+
+
+    // yaw
+    const KiteDynamics::IdentMode identMode = KiteDynamics::IdentMode::YAW;
+    const int dimp = 12;
+
     const int DATA_POINTS = 106;
     const int poly_order = 3;
     const int num_segments = 35;
 
-//    // yaw
-//    const int DATA_POINTS = 64;
-//    const int poly_order = 3;
-//    const int num_segments = 21;
-
-    //OptProblemProperties opp(13, 4, 10, 346, 3, 115);
-    //OptProblemProperties opp(dimx, dimu, dimp, DATA_POINTS, poly_order, num_segments);
 
     const int n_optimizationFailed_max = 3;
 
     /// ============================================================================================================ ///
-    /* User config check */
-    if (!(
-            (identMode == KiteDynamics::IdentMode::LONGITUDINAL && dimp == 9 && DATA_POINTS == 106)
-            ||
-            (identMode == KiteDynamics::IdentMode::LATERAL && dimp == 11 && DATA_POINTS == 325)
-            ||
-            (identMode == KiteDynamics::IdentMode::LATERAL && dimp == 11 && DATA_POINTS == 85)
-            ||
-            (identMode == KiteDynamics::IdentMode::YAW && dimp == 12 && DATA_POINTS == 64)
-            ||
-            (identMode == KiteDynamics::IdentMode::COMPLETE && dimp == 21 && DATA_POINTS == 106)
-
-
-    )) {
-        std::cout << "Identification mode/dimp/DATA_POINTS mismatch. Check user config!\n";
-        return EXIT_FAILURE;
-    }
-
     std::string identManeuver;
     if (identMode == KiteDynamics::IdentMode::LONGITUDINAL) {
         identManeuver = "identPitch";
@@ -877,8 +1005,7 @@ int main() {
 
     /* Cost matrix */
     DM Q;
-    get_costMatrix(identMode,
-
+    get_costMatrix(identMode, useEulerAnglesForCostFunction,
                    Q);
 
     /* State bounds (constant over all sequences and iterations) */
@@ -965,6 +1092,11 @@ int main() {
             SX measured_state = id_states_woTime(Slice(0, dimx), jTimeStep);
             SX state_to_optimize = varx_(Slice(0, dimx), DATA_POINTS - jTimeStep - 1); // time-reverse
 
+            if (useEulerAnglesForCostFunction) {
+                /* Convert quaternion to euler angles for cost calculation */
+                substitute_quat2euler(measured_state);
+                substitute_quat2euler(state_to_optimize);
+            }
             /* Error and sum up */
             SX error = measured_state - state_to_optimize;
             fitting_error += static_cast<double>(1.0 / DATA_POINTS) * SX::sum1(SX::mtimes(Q, pow(error, 2)));
@@ -979,8 +1111,9 @@ int main() {
         std::string kite_params_in_filepath = kite_baseParams_dir + kite_baseParams_filename + ".yaml";
         std::cout << "Base params: " << kite_params_in_filepath << "\n";
 
+        KiteProperties baseKiteParams = kite_utils::LoadProperties(kite_params_in_filepath);
         KiteDynamics kite, kite_int;
-        get_kiteDynamics(kite_params_in_filepath, windFrom_deg, windSpeed, identMode, controlsIncludeWind,
+        get_kiteDynamics(baseKiteParams, windFrom_deg, windSpeed, identMode, controlsIncludeWind,
 
                          kite, kite_int);
 
@@ -993,6 +1126,17 @@ int main() {
 
         SX diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
         diff_constr = diff_constr(Slice(0, num_segments * poly_order * dimx));
+
+        /** Set base parameters **/
+        /* Parameter bounds */
+        /* (For each DATA_POINT) */
+        DM REF_P;   // Parameter ref values
+        DM LBP;     // Parameter lower bounds
+        DM UBP;     // Parameter upper bounds
+        std::list<Parameter> paramList; // List to map parameter id and name to sort them by sensitivity later
+
+        setup_optimizationParameters(baseKiteParams, identMode, true,
+                                     REF_P, LBP, UBP, paramList);
 
 
         /** Create solver **/
@@ -1042,15 +1186,9 @@ int main() {
             std::cout << "Kite param file IN: " << kite_params_in_filepath << "\n";
             KiteProperties kite_props_in = kite_utils::LoadProperties(kite_params_in_filepath);
 
-            /* Parameter bounds */
-            /* (For each DATA_POINT) */
-            DM REF_P;   // Parameter initial values
-            DM LBP;     // Parameter lower bounds
-            DM UBP;     // Parameter upper bounds
-
-            std::list<Parameter> paramList; // List to map parameter id and name to sort them by sensitivity later
-
-            setup_optimizationParameters(kite_props_in, identMode,
+            /* Update parameter ref values (result from last iteration) */
+            paramList.clear();
+            setup_optimizationParameters(kite_props_in, identMode, true,
 
                                          REF_P, LBP, UBP, paramList);
 
@@ -1085,7 +1223,6 @@ int main() {
                     optResult_lam_g = DM::zeros(diff_constr.size1());
 
                     readin_optResultsFile(optResults0_filepath,
-
                                           optResult_x, optResult_lam_x, optResult_lam_g);
 
                 } else {
@@ -1106,10 +1243,9 @@ int main() {
                         init_control = DM({0.1, 0.0, 0.0, 0.0, 180.0, 0.5});
                     else
                         init_control = DM({0.1, 0.0, 0.0, 0.0});
-
-                    std::cout << "init_state: " << id_state0 << ", constant control: " << init_control << "\n";
-
-                    init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
+                    //init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
+                    init_control = DM::vec(id_controls_rev_woTime);
+                    std::cout << "init_state: " << id_state0 << ",\n init control: " << init_control << "\n";
 
                     feasible_guess = ps_solver.solve_trajectory(id_state0, init_control, true);
 
@@ -1118,6 +1254,19 @@ int main() {
                     optResult_lam_x = DM::vertcat({feasible_guess.at("lam_x"), DM::zeros(REF_P.size1())});
                     optResult_lam_g = feasible_guess.at("lam_g");
                     std::cout << "Initial guess found.\n";
+
+                    /** Write estimated trajectory to file **/
+                    /* Time-reverse trajectory from optimization result, reshape, reverse time */
+                    DM est_traj_rev_vect = optResult_x(Slice(0, varx.size1()));
+                    DM est_traj_rev_woTime = DM::reshape(est_traj_rev_vect, dimx, DATA_POINTS);
+                    DM est_traj_woTime = flipDM(est_traj_rev_woTime, 2);
+
+                    /* Now: Rows: States, Columns: Time steps
+                     * Add original times as first row */
+                    DM est_traj_wTime = DM::vertcat({id_time, est_traj_woTime});
+                    std::string afterItStr = "afterIt_" + std::to_string(0);
+                    std::string est_traj_filepath = kite_params_out_dir + afterItStr + "_estimatedTrajectory.txt";
+                    write_trajectoryFile(est_traj_wTime, est_traj_filepath);
                 }
             }
 
