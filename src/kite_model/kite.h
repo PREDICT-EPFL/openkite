@@ -116,6 +116,9 @@ namespace kite_utils {
     /** load properties from a YAML file */
     KiteProperties LoadProperties(const std::string &filename);
 
+    KiteProperties LoadMinimalProperties(const std::string &filename);
+
+
     /** architecture-dependend time stamping */
     typedef std::chrono::time_point<std::chrono::system_clock> time_point;
 
@@ -130,23 +133,22 @@ namespace kite_utils {
     /** check if file exists */
     bool file_exists(const std::string &filename);
 
-}
-
-class KiteDynamics {
-public:
-
     enum IdentMode {
         LONGITUDINAL,
         LATERAL,
         YAW,
         COMPLETE
     };
+}
 
+class KiteDynamics {
+public:
     //constructor
     KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
                  const bool controlsIncludeWind = false);
 
-    KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps, const IdentMode &identMode,
+    KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
+                 const kite_utils::IdentMode &identMode,
                  const bool controlsIncludeWind = false);
 
     KiteDynamics() = default;
@@ -196,17 +198,17 @@ public:
 
                   DLA &CYb,
 
-                  GEN &Cl0,
+                  DLA &Cl0,
                   DLA &Clb,
 
-                  GEN &Cn0,
+                  DLA &Cn0,
                   DLA &Cnb,
 
 
                   DLO &CLq,
                   DLO &Cmq,
 
-                  DLA &CYp,
+                  GEN &CYp,
                   DLA &Clp,
                   DLA &Cnp,
 
@@ -215,13 +217,13 @@ public:
                   DLA &Cnr,
 
 
-                  ELV &CLde,
+                  GEN &CLde,
                   ELV &Cmde,
 
                   AIL &Clda,
-                  AIL &Cnda,
+                  GEN &Cnda,
 
-                  RUD &CYdr,
+                  GEN &CYdr,
                   RUD &Cldr,
                   RUD &Cndr,
 
@@ -229,6 +231,61 @@ public:
                   casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
                   casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
                   casadi::SX &Faero_b, casadi::SX &T_b);
+
+
+    /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
+    template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
+    void getMinimalModel(GEN &g, GEN &rho,
+                         W &windFrom_deg, W &windSpeed,
+                         GEN &b, GEN &c, GEN &AR, GEN &S,
+                         GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
+
+                         GEN &e_o,
+                         DLO &CD0,
+
+
+                         DLO &CL0,
+                         DLO &CLa,
+
+                         DLO &Cm0,
+                         DLO &Cma,
+
+
+                         DLA &CYb,
+
+            //GEN &Cl0,
+                         DLA &Clb,
+
+            //GEN &Cn0,
+                         DLA &Cnb,
+
+
+            //DLO &CLq,
+            //DLO &Cmq,
+
+            //GEN &CYp,
+                         DLA &Clp,
+            //DLA &Cnp,
+
+            //DLA &CYr,
+            //DLA &Clr,
+            //DLA &Cnr,
+
+
+            //ELV &CLde,
+                         ELV &Cmde,
+
+                         AIL &Clda,
+            //GEN &Cnda,
+
+            //RUD &CYdr,
+            //RUD &Cldr,
+                         RUD &Cndr,
+
+                         casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
+                         casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
+                         casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
+                         casadi::SX &Faero_b, casadi::SX &T_b);
 
 private:
     //state variables
@@ -255,6 +312,125 @@ private:
 
     casadi::Function AeroDynamics;
 };
+
+class MinimalKiteDynamics {
+public:
+
+    //constructor
+    MinimalKiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
+                        const bool controlsIncludeWind = false);
+
+    MinimalKiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
+                        const kite_utils::IdentMode &identMode,
+                        const bool controlsIncludeWind = false);
+
+    MinimalKiteDynamics() = default;
+
+    virtual ~MinimalKiteDynamics() {}
+
+    /** public methods */
+    casadi::SX getSymbolicState() { return this->State; }
+
+    casadi::SX getSymbolicControl() { return this->Control; }
+
+    casadi::SX getSymbolicParameters() { return this->Parameters; }
+
+    casadi::SX getSymbolicDynamics() { return this->SymDynamics; }
+
+    casadi::SX getSymbolicIntegrator() { return this->SymIntegartor; }
+
+    casadi::SX getSymbolicJacobian() { return this->SymJacobian; }
+
+    casadi::Function getNumericDynamics() { return this->NumDynamics; }
+
+    casadi::Function getNumericNumSpecNongravForce() { return this->NumSpecNongravForce; }
+
+    casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
+
+    casadi::Function getNumericJacobian() { return this->NumJacobian; }
+
+    casadi::Function getAeroDynamicForces() { return this->AeroDynamics; }
+
+    /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
+    template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
+    void getMinimalModel(GEN &g, GEN &rho,
+                         W &windFrom_deg, W &windSpeed,
+                         GEN &b, GEN &c, GEN &AR, GEN &S,
+                         GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
+
+                         GEN &e_o,
+                         DLO &CD0,
+
+
+                         DLO &CL0,
+                         DLO &CLa,
+
+                         DLO &Cm0,
+                         DLO &Cma,
+
+
+                         DLA &CYb,
+
+            //GEN &Cl0,
+                         DLA &Clb,
+
+            //GEN &Cn0,
+                         DLA &Cnb,
+
+
+            //DLO &CLq,
+            //DLO &Cmq,
+
+            //GEN &CYp,
+                         DLA &Clp,
+            //DLA &Cnp,
+
+            //DLA &CYr,
+            //DLA &Clr,
+                         DLA &Cnr,
+
+
+            //ELV &CLde,
+                         ELV &Cmde,
+
+                         AIL &Clda,
+            //GEN &Cnda,
+
+            //RUD &CYdr,
+            //RUD &Cldr,
+                         RUD &Cndr,
+
+                         casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
+                         casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
+                         casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
+                         casadi::SX &Faero_b, casadi::SX &T_b);
+
+private:
+    //state variables
+    casadi::SX State;
+    //control variables
+    casadi::SX Control;
+    //parameters
+    casadi::SX Parameters;
+    //symbolic equations of motion
+    casadi::SX SymDynamics;
+    //symbolic equations of integartor
+    casadi::SX SymIntegartor;
+    //symbolic expression for system jacobian
+    casadi::SX SymJacobian;
+
+    //numerical dynamics evaluation
+    casadi::Function NumDynamics;
+    //numerical specific nongravitational force evaluation
+    casadi::Function NumSpecNongravForce;
+    //numerical integral evaluation
+    casadi::Function NumIntegrator;
+    //numerical jacobian evaluation
+    casadi::Function NumJacobian;
+
+    casadi::Function AeroDynamics;
+};
+
 
 /** 6-DoF Kinematics of a Rigid Body */
 class RigidBodyKinematics {
