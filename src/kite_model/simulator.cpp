@@ -130,7 +130,7 @@ int main(int argc, char **argv)
 
     /** create a kite object */
     std::string kite_params_file;
-    n.param<std::string>("kiteParams_filepath", kite_params_file, "eg4_xflr.yaml");
+    n.param<std::string>("kiteparams_path", kite_params_file, "_kiteparams_.yaml");
     std::cout << "Simulator: Using kite parameters from: " << kite_params_file << "\n";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
     n.param<double>("windFrom_deg", kite_props.Wind.WindFrom_deg, 180.0);
@@ -147,11 +147,15 @@ int main(int argc, char **argv)
     n.param<int>("broadcast_state", broadcast_state, 1);
 
     /** create an integrator instance */
-    double sim_rate;
-    n.param<double>("simulation_rate", sim_rate, 200);
+    double node_rate;
+    n.param<double>("node_rate", node_rate, 200);
+
+    double sim_speed;
+    n.param<double>("simulation_speed", sim_speed, 1.0);
+
     /** cast to seconds and round to ms */
-    double dt = (1/sim_rate);
-    dt = std::roundf(dt * 1000) / 1000;
+    double dt = (1.0/node_rate);
+    dt = std::roundf(sim_speed * dt * 1000) / 1000;
 
     Dict params({{"tf", dt}, {"tol", 1e-6}, {"method", CVODES}});
     Function ode = kite.getNumericDynamics();
@@ -161,7 +165,8 @@ int main(int argc, char **argv)
 
     Simulator simulator(odeSolver, n);
     simulator.setNumericSpecNongravForce(kite.getNumericNumSpecNongravForce());
-    ros::Rate loop_rate(sim_rate); /** 50 Hz */
+
+    ros::Rate loop_rate(node_rate); /** 50 Hz */
 
     while (ros::ok())
     {

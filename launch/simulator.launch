@@ -1,6 +1,6 @@
 <launch>
 
-    <arg name="filepath_kiteParams" default="/home/johannes/identification/eg4_xflr.yaml" />
+    <arg name="filepath_kiteParams" default="/home/johannes/identification/eg4_id.yaml" />
 
     <arg name="windFrom_deg" default="135.0" />
     <arg name="windSpeed"    default="0.0" />
