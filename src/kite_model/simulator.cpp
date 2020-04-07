@@ -2,12 +2,20 @@
 
 using namespace casadi;
 
-void Simulator::controlCallback(const openkite::aircraft_controls::ConstPtr &msg)
+//void Simulator::controlCallback(const openkite::aircraft_controls::ConstPtr &msg)
+//{
+//    controls(0) = msg->thrust;
+//    controls(1) = msg->elevator;
+//    controls(2) = msg->rudder;
+//    controls(3) = msg->ailerons;
+//}
+
+void Simulator::controlCallback(const sensor_msgs::JoyConstPtr &msg)
 {
-    controls(0) = msg->thrust;
-    controls(1) = msg->elevator;
-    controls(2) = msg->rudder;
-    controls(3) = msg->ailerons;
+    controls(0) = msg->axes[0]; // Thrust
+    controls(1) = msg->axes[1]; // Elevator
+    controls(2) = msg->axes[2]; // Rudder
+    controls(3) = msg->axes[3]; // Aileron
 }
 
 Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh)
@@ -30,22 +38,27 @@ Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh)
 
     //pose_pub  = m_nh->advertise<geometry_msgs::PoseStamped>("/kite_pose", 100);
     state_pub   = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/kite_state", 1);
-    accel_pub   = m_nh->advertise<geometry_msgs::Vector3Stamped>("/kite_acceleration", 1);
 
-    std::string control_topic = "/kite_controls";
-    control_sub = m_nh->subscribe(control_topic, 100, &Simulator::controlCallback, this);
+    control_sub = m_nh->subscribe("/kite_controls", 100, &Simulator::controlCallback, this);
 
     msg_state.twist.resize(1);
     msg_state.transforms.resize(1);
-    msg_state.joint_names.resize(1);
+    msg_state.wrench.resize(1);
+
+    //msg_state.joint_names.resize(1);
+    //msg_state.joint_names[0] = "state";
+
     msg_state.header.frame_id = "kite_sim";
-    msg_state.joint_names[0] = "lox";
 }
 
 void Simulator::simulate()
 {
     Dict p = m_odeSolver->getParams();
     double dt = p["tf"];
+
+    /* Make sure thrust is not negative */
+    if (static_cast<double>(controls(0)) < 0.0)
+        controls(0) = 0.0;
 
     /* Get specific nongravitational force before solving (altering) the state */
     DM dynamics_evaluated = m_NumericSpecNongravForce(DMVector{state, controls})[0];
@@ -82,16 +95,12 @@ void Simulator::publish_state()
     msg_state.transforms[0].rotation.y = state_vec[11];
     msg_state.transforms[0].rotation.z = state_vec[12];
 
+    /* Using wrench/force as for acceleration */
+    msg_state.wrench[0].force.x = specNongravForce[0];
+    msg_state.wrench[0].force.y = specNongravForce[1];
+    msg_state.wrench[0].force.z = specNongravForce[2];
+
     state_pub.publish(msg_state);
-
-    /** Acceleration message */
-    msg_accel.header.stamp = msg_state.header.stamp;
-
-    msg_accel.vector.x = specNongravForce[0];
-    msg_accel.vector.y = specNongravForce[1];
-    msg_accel.vector.z = specNongravForce[2];
-
-    accel_pub.publish(msg_accel);
 }
 
 void Simulator::publish_pose()
@@ -121,7 +130,7 @@ int main(int argc, char **argv)
 
     /** create a kite object */
     std::string kite_params_file;
-    n.param<std::string>("kite_params", kite_params_file, "/home/johannes/identification/eg4.yaml");
+    n.param<std::string>("kiteparams_path", kite_params_file, "_kiteparams_.yaml");
     std::cout << "Simulator: Using kite parameters from: " << kite_params_file << "\n";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
     n.param<double>("windFrom_deg", kite_props.Wind.WindFrom_deg, 180.0);
@@ -138,11 +147,15 @@ int main(int argc, char **argv)
     n.param<int>("broadcast_state", broadcast_state, 1);
 
     /** create an integrator instance */
-    double sim_rate;
-    n.param<double>("simulation_rate", sim_rate, 200);
+    double node_rate;
+    n.param<double>("node_rate", node_rate, 200);
+
+    double sim_speed;
+    n.param<double>("simulation_speed", sim_speed, 1.0);
+
     /** cast to seconds and round to ms */
-    double dt = (1/sim_rate);
-    dt = std::roundf(dt * 1000) / 1000;
+    double dt = (1.0/node_rate);
+    dt = std::roundf(sim_speed * dt * 1000) / 1000;
 
     Dict params({{"tf", dt}, {"tol", 1e-6}, {"method", CVODES}});
     Function ode = kite.getNumericDynamics();
@@ -152,7 +165,8 @@ int main(int argc, char **argv)
 
     Simulator simulator(odeSolver, n);
     simulator.setNumericSpecNongravForce(kite.getNumericNumSpecNongravForce());
-    ros::Rate loop_rate(200); /** 50 Hz */
+
+    ros::Rate loop_rate(node_rate); /** 50 Hz */
 
     while (ros::ok())
     {

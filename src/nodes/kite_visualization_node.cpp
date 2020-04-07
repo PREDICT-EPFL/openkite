@@ -50,7 +50,7 @@ struct MarkerProperties {
     MarkerProperties() : type(visualization_msgs::Marker::SPHERE),
                          id(0),
                          action(visualization_msgs::Marker::ADD),
-                         frame_id("/kite"),
+                         frame_id("world"),
                          ns("awe"),
                          scale(Scale()),
                          color(Color()),
@@ -60,28 +60,26 @@ struct MarkerProperties {
         orientation.w = 1;
     }
 
-    void configureMarker(visualization_msgs::Marker &marker);
+    void configureMarker(visualization_msgs::Marker &marker) {
+        marker.type = type;
+        marker.id = id;
+        marker.ns = ns;
+        marker.header.frame_id = frame_id;
+        marker.header.stamp = ros::Time::now();
+        marker.action = action;
+        marker.color.r = color.r;
+        marker.color.g = color.g;
+        marker.color.b = color.b;
+        marker.color.a = color.transparency;
+        marker.scale.x = scale.x;
+        marker.scale.y = scale.y;
+        marker.scale.z = scale.z;
+        marker.pose.position = position;
+        marker.pose.orientation = orientation;
+        if (type == visualization_msgs::Marker::MESH_RESOURCE)
+            marker.mesh_resource = mesh_resource;
+    }
 };
-
-void MarkerProperties::configureMarker(visualization_msgs::Marker &marker) {
-    marker.type = type;
-    marker.id = id;
-    marker.ns = ns;
-    marker.header.frame_id = frame_id;
-    marker.header.stamp = ros::Time::now();
-    marker.action = action;
-    marker.color.r = color.r;
-    marker.color.g = color.g;
-    marker.color.b = color.b;
-    marker.color.a = color.transparency;
-    marker.scale.x = scale.x;
-    marker.scale.y = scale.y;
-    marker.scale.z = scale.z;
-    marker.pose.position = position;
-    marker.pose.orientation = orientation;
-    if (type == visualization_msgs::Marker::MESH_RESOURCE)
-        marker.mesh_resource = mesh_resource;
-}
 
 class KiteVisualizer {
 public:
@@ -267,6 +265,20 @@ DM KiteVisualizer::world2rviz(const DM &world_pose) {
     return pose;
 }
 
+void KiteVisualizer::state2marker(const DM &kite_pose, visualization_msgs::Marker &_marker) {
+    std::vector<double> pose = kite_pose.nonzeros();
+    _marker.pose.position.x = pose[0];
+    _marker.pose.position.y = pose[1];
+    _marker.pose.position.z = pose[2];
+
+    _marker.pose.orientation.w = pose[3];
+    _marker.pose.orientation.x = pose[4];
+    _marker.pose.orientation.y = pose[5];
+    _marker.pose.orientation.z = pose[6];
+}
+
+
+
 visualization_msgs::MarkerArray KiteVisualizer::getOptimalTrajectory() {
     visualization_msgs::MarkerArray m_array;
     int array_size = optimal_trajectory.size2();
@@ -332,17 +344,6 @@ visualization_msgs::Marker KiteVisualizer::getTetherMarker() {
     return tether_marker;
 }
 
-void KiteVisualizer::state2marker(const DM &kite_pose, visualization_msgs::Marker &_marker) {
-    std::vector<double> pose = kite_pose.nonzeros();
-    _marker.pose.position.x = pose[0];
-    _marker.pose.position.y = pose[1];
-    _marker.pose.position.z = pose[2];
-
-    _marker.pose.orientation.w = pose[3];
-    _marker.pose.orientation.x = pose[4];
-    _marker.pose.orientation.y = pose[5];
-    _marker.pose.orientation.z = pose[6];
-}
 
 
 int main(int argc, char **argv) {

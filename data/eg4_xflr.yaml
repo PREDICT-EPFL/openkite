@@ -1,0 +1,93 @@
+info:
+    name: EasyGlider4
+
+geom:                       ### Geometric parameters ###
+    b:   1.8                    # wing span [m]
+    c:   0.18523                # mean aerodynamic chord (MAC) [m]
+    AR:  10.479                 # aspect ratio [-]
+    S:   0.32347                # wing surface area [m2]
+    #set_ang: 0.087266462        # [rad] Setting angle of main wing wrt body frame (attitude sensor)
+    set_ang: 0.0                # [rad] Setting angle of main wing wrt body frame (attitude sensor)
+
+inertia:                        ### Mass and inertia parameters ###
+    mass: 1.4979                # [kg]
+    Ixx:  0.09175              # [kg * m2]
+    Iyy:  0.04721               # [kg * m2]
+    Izz:  0.13694               # [kg * m2]
+    Ixz:  -0.00375              # [kg * m2]
+
+aero:
+    e_oswald:   0.982 #.86            # Oswald efficiency number (e0=(CL^2)/(pi*AR*(CD-CD0)) [] (what value for CL)
+
+    # Static Drag force (D) (total Drag force of aircraft)
+    CD0:        0.01           # CD at CL=0 []
+
+
+aero_aoa:
+    ## Angle of attack (AOA)
+    # Angle of attack (alpha) -> Lift force (L) (total Lift force of aircraft)
+    CL0:        0.605           # CL at aoa = 0
+    CLa:        5.33366         # total lift coefficient derivative with respect to AoA [1/rad] 
+
+    # Angle of attack (alpha) -> Pitching moment (m)
+    Cm0:        0.002           # zero AoA pitching moment
+    Cma:        -0.93691        # pitching moment coefficient sensitivity wrt AoA [1/rad]
+    
+aero_ss:
+    ## Sideslip
+    # Sideslip angle (beta) -> Side force (Y)    
+    CYb:       -0.30098         # total side force coefficient [1/rad] (in BRF !!!) #Neglect?
+
+    # Sideslip angle (beta) -> Rolling moment (l)
+    Cl0:        0.0             # rolling moment for symmetric aircraft
+    Clb:        -0.10303        # rolling moment sensitivity wrt sideslip angle [1/rad]
+
+    # Sideslip angle (beta) -> Yawing moment (n)
+    Cn0:        0.0             # zero yawing moment for symmetric aircraft []
+    Cnb:        0.08078         # yawing moment sensitivity wrt sideslip [1/rad]
+
+
+    ## Body rates
+aero_rate_pitch:
+    # Pitchrate (q) -> Lift force (L), Pitching moment (m)
+    CLq:         7.95396        # pitch-rate lift coefficient [1/rad] // Etkin and Stengel give different estimation !!! Mainly by tail
+    Cmq:        -13.44834       # pitch-rate moment coefficient [1/rad] //Etkin and Stengel give different estimation !!! Mainly by tail
+
+aero_rate_roll:
+    # Rollrate (p) -> Side force (Y), Rolling moment (l), Yawing moment (n)
+    CYp:        -0.13217        # roll-rate side force coefficient [] #Neglect?
+    Clp:        -0.53864        # roll-rate rolling moment coefficient [] //Stengel gives Clp = - (CLa_w / 12) * ((1 + 3*lam)/(1+lam))
+    Cnp:        -0.08630        # roll-rate yawing moment coefficient []
+
+aero_rate_yaw:
+    # Yawrate (r) -> Side force (Y), Rolling moment (l), Yawing moment (n)
+    CYr:        0.23838         # yaw-rate side force effect [] //Etkin gives CYr = CLa_t * (Sf/S) * 2 * (lf/b)
+    Clr:        0.16467         # yaw-rate rolling moment effect []
+    Cnr:        -0.06590        # yaw-rate yawing moment effect [] //Etkin gives Cnr = -CLa_t * Vf * (2*lf/b)
+
+
+    ## Aerodynamic effects of control
+aero_ctrl_elev:
+    # Elevator deflection (de) -> Lift force (L), Pitching moment (m), Drag force (D)
+    CLde:        0.27577        # lift sensitivity to elevator deflection [1/rad] (CZde = -0.45)      
+    Cmde:        -0.89884       # pitch moment sensitivity wrt elevator deflection [1/rad]
+    #CDde:        0.00825        # drag force sensitivity wrt elevator deflection [1/rad]
+
+aero_ctrl_ail:
+    # Aileron deflection (da) -> Rolling moment (l), Yawing moment (n)
+    Clda:        -0.31367       # rolling moment sensitivity wrt Ailerons deflection [1/rad]
+    Cnda:        -0.00781       # yawing moment sensitivity wrt Ailerons deflection [1/rad] #jorev: positive roll (left) -> positive yawrate (right)
+
+aero_ctrl_rud:
+    # Rudder deflection (dr) -> Side force (Y), Rolling moment (l), Yawing moment (n)
+    CYdr:        0.20012        # side force sensitivity to rudder deflection [1/rad] (~ not consistent 0.13208)
+    Cldr:        0.01198        # (0.0055)rolling moment sensitivity wrt rudder deflection
+    Cndr:        -0.07403       # yawing moment sensitivity wrt rudder deflection [1/rad]
+
+tether:                         ### Tether parameters ###
+ #   length:      1000           # tether length
+ #   Ks:          0.66           # spring coefficient
+ #   Kd:          0.44           # damping coefficient
+ #   rx:          0.0            # attachment point on aircraft in aircraft body frame X [m]
+ #   ry:          0.0            # attachment point on aircraft in aircraft body frame Y [m]
+ #   rz:          0.0            # attachment point on aircraft in aircraft body frame Z [m]
