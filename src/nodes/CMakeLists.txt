@@ -26,3 +26,6 @@ target_link_libraries(transport_delay_test ${catkin_LIBRARIES})
 add_dependencies(optitrack_client openkite_generate_messages_cpp)
 add_dependencies(control_proxy_node openkite_generate_messages_cpp)
 add_dependencies(kite_visualization_node openkite_generate_messages_cpp)
+add_dependencies(transport_delay openkite_generate_messages_cpp)
+add_dependencies(transport_delay_test openkite_generate_messages_cpp)
+
