@@ -22,31 +22,39 @@ public:
 
     void publish_state();
     void publish_pose();
+    void publish_tether_force();
 
     bool is_initialized(){return initialized;}
     void initialize(const casadi::DM &_init_value){state = _init_value; initialized = true;}
 
+    void setNumericAirspeed(const casadi::Function &_NumericAirspeed) {m_NumericAirspeed = _NumericAirspeed;}
     void setNumericSpecNongravForce(const casadi::Function &_NumericSpecNongravForce) {m_NumericSpecNongravForce = _NumericSpecNongravForce;}
+    void setNumericSpecTethForce(const casadi::Function &_NumericSpecTethForce) {m_NumericSpecTethForce = _NumericSpecTethForce;}
+
+    bool sim_tether;
 
 private:
     std::shared_ptr<ros::NodeHandle> m_nh;
     std::shared_ptr<ODESolver> m_odeSolver;
+    casadi::Function m_NumericAirspeed;
     casadi::Function m_NumericSpecNongravForce;
+    casadi::Function m_NumericSpecTethForce;
 
     ros::Subscriber control_sub;
     ros::Publisher  state_pub;
+    ros::Publisher  tether_pub;
     ros::Publisher  pose_pub;
-    ros::Publisher  accel_pub;
 
     casadi::DM      controls;
     casadi::DM      state;
+    double          airspeed{0};
     std::vector<double> specNongravForce;
+    std::vector<double> specTethForce;
 
-//    void controlCallback(const openkite::aircraft_controls::ConstPtr &msg);
     void controlCallback(const sensor_msgs::JoyConstPtr &msg);
     double sim_rate;
     sensor_msgs::MultiDOFJointState msg_state;
-    //geometry_msgs::Vector3Stamped msg_accel;
+    geometry_msgs::Vector3Stamped msg_tether;
 
     bool initialized;
 };

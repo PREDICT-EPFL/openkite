@@ -53,7 +53,7 @@ KiteEKF_Node::KiteEKF_Node(const ros::NodeHandle &_nh, const Function &Integrato
     filter = std::make_shared<KiteEKF>(Integrator, Jacobian);
 
     /** initialize subscribers and publishers */
-    state_pub = nh->advertise<sensor_msgs::MultiDOFJointState>("/kite_state", 100);
+    state_pub = nh->advertise<sensor_msgs::MultiDOFJointState>("/sim/kite_state", 100);
 
     /** @todo : parametrize topics */
     std::string pose_topic = "/optitrack/Kite/pose";

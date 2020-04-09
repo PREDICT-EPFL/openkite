@@ -145,7 +145,7 @@ class KiteDynamics {
 public:
     //constructor
     KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
-                 const bool controlsIncludeWind = false);
+                 const bool teth_ON = false, const bool controlsIncludeWind = false);
 
     KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
                  const kite_utils::IdentMode &identMode,
@@ -157,25 +157,18 @@ public:
 
     /** public methods */
     casadi::SX getSymbolicState() { return this->State; }
-
     casadi::SX getSymbolicControl() { return this->Control; }
-
     casadi::SX getSymbolicParameters() { return this->Parameters; }
-
     casadi::SX getSymbolicDynamics() { return this->SymDynamics; }
-
     casadi::SX getSymbolicIntegrator() { return this->SymIntegartor; }
-
     casadi::SX getSymbolicJacobian() { return this->SymJacobian; }
 
     casadi::Function getNumericDynamics() { return this->NumDynamics; }
-
-    casadi::Function getNumericNumSpecNongravForce() { return this->NumSpecNongravForce; }
-
+    casadi::Function getNumericAirspeed() { return this->NumAirspeed; }
+    casadi::Function getNumericSpecNongravForce() { return this->NumSpecNongravForce; }
+    casadi::Function getNumericSpecTethForce() { return this->NumSpecTethForce; }
     casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
-
     casadi::Function getNumericJacobian() { return this->NumJacobian; }
-
     casadi::Function getAeroDynamicForces() { return this->AeroDynamics; }
 
     /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
@@ -185,7 +178,7 @@ public:
                   GEN &b, GEN &c, GEN &AR, GEN &S,
                   GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
-                  GEN &e_o,
+                  GEN &e_oswald,
                   DLO &CD0,
 
 
@@ -198,7 +191,7 @@ public:
 
                   DLA &CYb,
 
-                  DLA &Cl0,
+                  GEN &Cl0,
                   DLA &Clb,
 
                   DLA &Cn0,
@@ -208,7 +201,7 @@ public:
                   DLO &CLq,
                   DLO &Cmq,
 
-                  GEN &CYp,
+                  DLA &CYp,
                   DLA &Clp,
                   DLA &Cnp,
 
@@ -217,75 +210,20 @@ public:
                   DLA &Cnr,
 
 
-                  GEN &CLde,
+                  ELV &CLde,
                   ELV &Cmde,
 
                   AIL &Clda,
-                  GEN &Cnda,
+                  AIL &Cnda,
 
-                  GEN &CYdr,
+                  RUD &CYdr,
                   RUD &Cldr,
                   RUD &Cndr,
 
                   casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                   casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
                   casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                  casadi::SX &Faero_b, casadi::SX &T_b);
-
-
-    /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
-    template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
-    void getMinimalModel(GEN &g, GEN &rho,
-                         W &windFrom_deg, W &windSpeed,
-                         GEN &b, GEN &c, GEN &AR, GEN &S,
-                         GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
-
-                         GEN &e_o,
-                         DLO &CD0,
-
-
-                         DLO &CL0,
-                         DLO &CLa,
-
-                         DLO &Cm0,
-                         DLO &Cma,
-
-
-                         DLA &CYb,
-
-            //GEN &Cl0,
-                         DLA &Clb,
-
-            //GEN &Cn0,
-                         DLA &Cnb,
-
-
-            //DLO &CLq,
-            //DLO &Cmq,
-
-            //GEN &CYp,
-                         DLA &Clp,
-            //DLA &Cnp,
-
-            //DLA &CYr,
-            //DLA &Clr,
-            //DLA &Cnr,
-
-
-            //ELV &CLde,
-                         ELV &Cmde,
-
-                         AIL &Clda,
-            //GEN &Cnda,
-
-            //RUD &CYdr,
-            //RUD &Cldr,
-                         RUD &Cndr,
-
-                         casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
-                         casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
-                         casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                         casadi::SX &Faero_b, casadi::SX &T_b);
+                  casadi::SX &Va, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON, casadi::SX &b_Ftether);
 
 private:
     //state variables
@@ -303,8 +241,12 @@ private:
 
     //numerical dynamics evaluation
     casadi::Function NumDynamics;
+    //numerical airspeed evaluation
+    casadi::Function NumAirspeed;
     //numerical specific nongravitational force evaluation
     casadi::Function NumSpecNongravForce;
+    //numerical tether force evaluation
+    casadi::Function NumSpecTethForce;
     //numerical integral evaluation
     casadi::Function NumIntegrator;
     //numerical jacobian evaluation
@@ -358,7 +300,7 @@ public:
                          GEN &b, GEN &c, GEN &AR, GEN &S,
                          GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
-                         GEN &e_o,
+                         DLO &e_oswald,
                          DLO &CD0,
 
 
