@@ -153,7 +153,7 @@ KiteVisualizer::KiteVisualizer(const ros::NodeHandle &_nh) {
     kite_state.header.frame_id = "kite";
     kite_state.joint_names[0] = "lox";
 
-    std::string state_topic = "/kite_state";
+    std::string state_topic = "/sim/kite_state";
     state_sub = nh->subscribe(state_topic, 100, &KiteVisualizer::filterCallback, this);
     opt_traj_sub = nh->subscribe("/opt_traj", 100, &KiteVisualizer::controlCallback, this);
 

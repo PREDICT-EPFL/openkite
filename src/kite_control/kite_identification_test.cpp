@@ -513,7 +513,7 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
         paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
         paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
 
-        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.03, 0.03, true);
+        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.1, 0.03, true);
         paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
 
 
@@ -523,8 +523,9 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
 
 
         /* Elevator */
-        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -relBound, relBound);
-        // 8 longitudinal parameters
+        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -0.3, 0.3);
+        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -0.3, 0.3);
+        // 10 longitudinal parameters
 
     } else if (identMode == kite_utils::IdentMode::LATERAL) {
 
@@ -533,7 +534,6 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
         /* Sideslip */
         paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
 
-        paramList.emplace_back("aero_ss", "Cl0", kiteProps.Aerodynamics.Cl0, -0.2, 0.2, true);
         paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb, -relBound, relBound);
 
         paramList.emplace_back("aero_ss", "Cn0", kiteProps.Aerodynamics.Cl0, -0.2, 0.2, true);
@@ -541,6 +541,7 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
 
 
         /* Rollrate */
+        paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -relBound, relBound);
         paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -relBound, relBound);
         paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -relBound, relBound);
 
@@ -552,7 +553,8 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
 
         /* Ailerons */
         paramList.emplace_back("aero_ctrl_ail", "Clda", kiteProps.Aerodynamics.Clda, -relBound, relBound);
-        // 11 lateral/aileron parameters
+        paramList.emplace_back("aero_ctrl_ail", "Cnda", kiteProps.Aerodynamics.Cnda, -relBound, relBound);
+        // 12 lateral/aileron parameters
 
 
     } else if (identMode == kite_utils::IdentMode::YAW) {
@@ -562,7 +564,6 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
         /* Sideslip */
         paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
 
-        paramList.emplace_back("aero_ss", "Cl0", kiteProps.Aerodynamics.Cl0, -0.2, 0.2, true);
         paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb, -relBound, relBound);
 
         paramList.emplace_back("aero_ss", "Cn0", kiteProps.Aerodynamics.Cn0, -0.2, 0.2, true);
@@ -570,6 +571,7 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
 
 
         /* Rollrate */
+        paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -relBound, relBound);
         paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -relBound, relBound);
         paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -relBound, relBound);
 
@@ -586,54 +588,58 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
 
     }
 
-//    else if (identMode == kite_utils::IdentMode::COMPLETE) {
-//
-//        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -0.5, 0.7);
-//
-//        /* AOA */
-//        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -0.1, 0.5);
-//        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -0.05, 0.1);
-//
-//        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.5, 0.5);
-//        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -0.1, 0.3);
-//
-//        /* Sideslip */
-//        paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -0.5, 0.5);
-//
-//        paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb, -0.5, 0.5);
-//
-//        paramList.emplace_back("aero_ss", "Cnb", kiteProps.Aerodynamics.Cnb, -0.5, 0.5);
-//
-//
-//        /* Pitchrate */
-//        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -0.5, 0.5);
-//        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -0.3, 0.3);
-//
-//        /* Rollrate */
-//        paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -0.5, 0.5);
-//        paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -0.5, 0.5);
-//        paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -0.3, 1.0);
-//
-//        /* Yawrate */
-//        paramList.emplace_back("aero_rate_yaw", "CYr", kiteProps.Aerodynamics.CYr, -0.3, 0.3);
-//        paramList.emplace_back("aero_rate_yaw", "Clr", kiteProps.Aerodynamics.Clr, -0.5, 0.5);
-//        paramList.emplace_back("aero_rate_yaw", "Cnr", kiteProps.Aerodynamics.Cnr, -0.3, 1.0);
-//
-//
-//        /* Elevator */
-//        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -0.5, 0.5);
-//        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -0.5, 0.5);
-//
-//        /* Ailerons */
-//        paramList.emplace_back("aero_ctrl_ail", "Clda", kiteProps.Aerodynamics.Clda, -0.5, 0.5);
-//        paramList.emplace_back("aero_ctrl_ail", "Cnda", kiteProps.Aerodynamics.Cnda, -0.5, 1.5);
-//        // 21 complete parameters
-//
-////        /* Rudder */
-////        paramList.emplace_back("aero_ctrl_rud", "CYdr", kiteProps.Aerodynamics.CYdr, -0.5, 0.5);
-////        paramList.emplace_back("aero_ctrl_rud", "Cldr", kiteProps.Aerodynamics.Cldr, -0.5, 0.5);
-////        paramList.emplace_back("aero_ctrl_rud", "Cndr", kiteProps.Aerodynamics.Cndr, -0.5, 0.5);
-//    }
+    else if (identMode == kite_utils::IdentMode::COMPLETE) {
+
+        double relBound = 0.7;
+
+        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -relBound, relBound);
+
+        /* AOA */
+        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
+        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
+
+        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.03, 0.03, true);
+        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
+
+        /* Sideslip */
+        paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relBound, relBound);
+
+        paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb,-relBound, relBound);
+
+        paramList.emplace_back("aero_ss", "Cn0", kiteProps.Aerodynamics.Cn0, -0.2, 0.2, true);
+        paramList.emplace_back("aero_ss", "Cnb", kiteProps.Aerodynamics.Cnb, -relBound, relBound);
+
+
+        /* Pitchrate */
+        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -relBound, relBound);
+        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -relBound, relBound);
+
+        /* Rollrate */
+        paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -relBound, relBound);
+        paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -relBound, relBound);
+        paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -relBound, relBound);
+
+        /* Yawrate */
+        paramList.emplace_back("aero_rate_yaw", "CYr", kiteProps.Aerodynamics.CYr, -relBound, relBound);
+        paramList.emplace_back("aero_rate_yaw", "Clr", kiteProps.Aerodynamics.Clr, -relBound, relBound);
+        paramList.emplace_back("aero_rate_yaw", "Cnr", kiteProps.Aerodynamics.Cnr, -relBound, relBound);
+
+
+        /* Elevator */
+        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -relBound, relBound);
+
+        /* Ailerons */
+        paramList.emplace_back("aero_ctrl_ail", "Clda", kiteProps.Aerodynamics.Clda, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_ail", "Cnda", kiteProps.Aerodynamics.Cnda, -relBound, relBound);
+
+        /* Rudder */
+        paramList.emplace_back("aero_ctrl_rud", "CYdr", kiteProps.Aerodynamics.CYdr, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_rud", "Cldr", kiteProps.Aerodynamics.Cldr, -relBound, relBound);
+        paramList.emplace_back("aero_ctrl_rud", "Cndr", kiteProps.Aerodynamics.Cndr, -relBound, relBound);
+
+        // 25 complete parameters
+    }
 
 
     if (setBounds) {
@@ -1119,15 +1125,17 @@ int main() {
 
     // pitch / longitudinal
     const kite_utils::IdentMode identMode = kite_utils::IdentMode::LONGITUDINAL;
-    //const int dimp = 8; // full model
-    const int dimp = 6; // minimal model
-    const bool useMinimalModel = true;
+    const int dimp = 9; // full model
+//    const int dimp = 7; // minimal model
+    const bool useMinimalModel = false;
 
     const bool useEulerAnglesForCostFunction = false;
     const int DATA_POINTS = 148;
     const int poly_order = 3;
     const int num_segments = 49;
 
+//    const int DATA_POINTS = 1261;
+//    const int num_segments = 420;
 
 //    // yaw
 //    const kite_utils::IdentMode identMode = kite_utils::IdentMode::YAW;
@@ -1141,6 +1149,18 @@ int main() {
 //    const int num_segments = 35;
 
 
+//    // complete
+//    const kite_utils::IdentMode identMode = kite_utils::IdentMode::COMPLETE;
+//    const int dimp = 25; // full model
+////    const int dimp = 6; // minimal model
+//    const bool useMinimalModel = false;
+//
+//    const bool useEulerAnglesForCostFunction = false;
+//    const int DATA_POINTS = 1261;
+//    const int poly_order = 3;
+//    const int num_segments = 420;
+
+
     const int n_optimizationFailed_max = 3;
 
     /// ============================================================================================================ ///
@@ -1151,6 +1171,8 @@ int main() {
         identManeuver = "identRoll";
     } else if (identMode == kite_utils::IdentMode::YAW) {
         identManeuver = "identYaw";
+    } else if (identMode == kite_utils::IdentMode::COMPLETE) {
+        identManeuver = "manual_id";
     }
 
     std::cout << "\nRunning " << identManeuver << " identification of " << dimp << " parameters with "
@@ -1166,12 +1188,12 @@ int main() {
 
     /* State bounds (constant over all sequences and iterations) */
     DM UBX = DM::vertcat({45, 10, 10,
-                          4 * M_PI, 4 * M_PI, 4 * M_PI,
+                          1 * M_PI, 1 * M_PI, 1 * M_PI,
                           300, 300, 0,
                           1.05, 1.05, 1.05, 1.05});
 
     DM LBX = DM::vertcat({2.0, -10, -10,
-                          -4 * M_PI, -4 * M_PI, -4 * M_PI,
+                          -1 * M_PI, -1 * M_PI, -1 * M_PI,
                           -300, -300, -300,
                           -1.05, -1.05, -1.05, -1.05});     // for infinity use -DM::inf(1) and DM::inf(1)
 
@@ -1274,12 +1296,12 @@ int main() {
             baseKiteParams = kite_utils::LoadProperties(kite_params_in_filepath);
 
         /// *************** comment out appropriate model #minimalmodel ************** ///
-//        KiteDynamics kite, kite_int;
-//        get_kiteDynamics(baseKiteParams, windFrom_deg, windSpeed, identMode, controlsIncludeWind,
-//                         kite, kite_int);
-        MinimalKiteDynamics kite, kite_int;
-        get_minimalKiteDynamics(baseKiteParams, windFrom_deg, windSpeed, identMode, controlsIncludeWind,
-                                kite, kite_int);
+        KiteDynamics kite, kite_int;
+        get_kiteDynamics(baseKiteParams, windFrom_deg, windSpeed, identMode, controlsIncludeWind,
+                         kite, kite_int);
+//        MinimalKiteDynamics kite, kite_int;
+//        get_minimalKiteDynamics(baseKiteParams, windFrom_deg, windSpeed, identMode, controlsIncludeWind,
+//                                kite, kite_int);
 
         Function DynamicsFunc = kite.getNumericDynamics();
         //SX X = kite.getSymbolicState();

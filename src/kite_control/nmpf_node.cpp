@@ -104,11 +104,11 @@ KiteNMPF_Node::KiteNMPF_Node(const ros::NodeHandle &_nh, const KiteProperties &k
     solver = std::make_shared<ODESolver>(system, opts);
 
     /** initialize subscribers and publishers */
-    control_pub = nh->advertise<openkite::aircraft_controls>("/kite_controls", 100);
+    control_pub = nh->advertise<openkite::aircraft_controls>("/sim/set/kite_controls", 100);
     traj_pub = nh->advertise<sensor_msgs::MultiDOFJointState>("/opt_traj", 10);
     diagnostic_pub = nh->advertise<openkite::mpc_diagnostic>("/mpc_diagnostic", 10);
 
-    std::string state_topic = "/kite_state";
+    std::string state_topic = "/sim/kite_state";
     state_sub = nh->subscribe(state_topic, 100, &KiteNMPF_Node::filterCallback, this);
 
     m_initialized = false;
