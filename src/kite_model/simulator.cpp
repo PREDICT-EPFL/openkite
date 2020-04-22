@@ -82,12 +82,12 @@ void Simulator::simulate()
     //std::cout << "State: " << state << "\n";
 }
 
-void Simulator::publish_state()
+void Simulator::publish_state(const ros::Time &sim_time)
 {
     /** State message */
     std::vector<double> state_vec = state.nonzeros();
 
-    msg_state.header.stamp = ros::Time::now();
+    msg_state.header.stamp = sim_time;
 
     msg_state.twist[0].linear.x = state_vec[0];
     msg_state.twist[0].linear.y = state_vec[1];
@@ -117,13 +117,13 @@ void Simulator::publish_state()
     state_pub.publish(msg_state);
 }
 
-void Simulator::publish_pose()
+void Simulator::publish_pose(const ros::Time &sim_time)
 {
     DM pose = getPose();
     std::vector<double> pose_vec = pose.nonzeros();
 
     geometry_msgs::PoseStamped msg_pose;
-    msg_pose.header.stamp = ros::Time::now();
+    msg_pose.header.stamp = sim_time;
 
     msg_pose.pose.position.x = pose_vec[0];
     msg_pose.pose.position.y = pose_vec[1];
@@ -137,9 +137,9 @@ void Simulator::publish_pose()
     pose_pub.publish(msg_pose);
 }
 
-void Simulator::publish_tether_force() {
+void Simulator::publish_tether_force(const ros::Time &sim_time) {
 
-    msg_state.header.stamp = ros::Time::now();
+    msg_state.header.stamp = sim_time;
 
     msg_tether.vector.x = specTethForce[0];
     msg_tether.vector.y = specTethForce[1];
@@ -147,7 +147,6 @@ void Simulator::publish_tether_force() {
 
     tether_pub.publish(msg_tether);
 }
-
 
 int main(int argc, char **argv)
 {
@@ -173,6 +172,7 @@ int main(int argc, char **argv)
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
     KiteDynamics kite = KiteDynamics(kite_props, algo_props, simulate_tether, false);
+//    MinimalKiteDynamics kite = MinimalKiteDynamics(kite_props, algo_props, false);
 
     int broadcast_state;
     n.param<int>("broadcast_state", broadcast_state, 1);
@@ -200,6 +200,8 @@ int main(int argc, char **argv)
     simulator.setNumericSpecNongravForce(kite.getNumericSpecNongravForce());
     simulator.setNumericSpecTethForce(kite.getNumericSpecTethForce());
 
+    ros::Time simulation_time_start = ros::Time::now();
+
     ros::Rate loop_rate(node_rate); /** 50 Hz */
 
     while (ros::ok())
@@ -207,13 +209,19 @@ int main(int argc, char **argv)
         if(simulator.is_initialized())
         {
             simulator.simulate();
+
+//            double sim_time_sec = (ros::Time::now() - simulation_time_start).toSec() * sim_speed;
+            ros::Time sim_time;
+//            sim_time.fromSec(sim_time_sec);
+            sim_time = ros::Time::now();
+
             if(broadcast_state)
-                simulator.publish_state();
+                simulator.publish_state(sim_time);
             else
-                simulator.publish_pose();
+                simulator.publish_pose(sim_time);
 
             if (simulator.sim_tether) {
-                simulator.publish_tether_force();
+                simulator.publish_tether_force(sim_time);
             }
 
             if (-simulator.getState().nonzeros()[8] < 0) {

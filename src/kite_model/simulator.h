@@ -20,9 +20,9 @@ public:
     casadi::DM getState(){return state;}
     casadi::DM getPose(){return state(casadi::Slice(6,13));}
 
-    void publish_state();
-    void publish_pose();
-    void publish_tether_force();
+    void publish_state(const ros::Time &sim_time);
+    void publish_pose(const ros::Time &sim_time);
+    void publish_tether_force(const ros::Time &sim_time);
 
     bool is_initialized(){return initialized;}
     void initialize(const casadi::DM &_init_value){state = _init_value; initialized = true;}

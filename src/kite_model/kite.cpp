@@ -117,12 +117,6 @@ KiteProperties LoadMinimalProperties(const std::string &filename) {
     props.Geometry.mac = config["geom"]["c"].as<double>();
     props.Geometry.aspectRatio = config["geom"]["AR"].as<double>();
     props.Geometry.wingSurfaceArea = config["geom"]["S"].as<double>();
-    //props.Geometry.TaperRatio = config["geometry"]["lam"].as<double>();
-    //props.Geometry.HTailsurface = config["geometry"]["St"].as<double>();
-    //props.Geometry.TailLeverArm = config["geometry"]["lt"].as<double>();
-    //props.Geometry.FinSurfaceArea = config["geometry"]["Sf"].as<double>();
-    //props.Geometry.FinLeverArm = config["geometry"]["lf"].as<double>();
-    //props.Geometry.AerodynamicCenter = config["geometry"]["Xac"].as<double>();
 
     /** --------------------------- **/
     /** Mass and inertia parameters **/
@@ -151,25 +145,18 @@ KiteProperties LoadMinimalProperties(const std::string &filename) {
     /* Sideslip */
     props.Aerodynamics.CYb = config["aero_ss"]["CYb"].as<double>();
 
-//        props.Aerodynamics.Cl0 = config["aero_ss"]["Cl0"].as<double>();
     props.Aerodynamics.Clb = config["aero_ss"]["Clb"].as<double>();
 
-//        props.Aerodynamics.Cn0 = config["aero_ss"]["Cn0"].as<double>();
     props.Aerodynamics.Cnb = config["aero_ss"]["Cnb"].as<double>();
-
-
-    /* Pitchrate */
-//        props.Aerodynamics.CLq = config["aero_rate_pitch"]["CLq"].as<double>();
-//        props.Aerodynamics.Cmq = config["aero_rate_pitch"]["Cmq"].as<double>();
 
     /* Rollrate */
 //        props.Aerodynamics.CYp = config["aero_rate_roll"]["CYp"].as<double>();
     props.Aerodynamics.Clp = config["aero_rate_roll"]["Clp"].as<double>();
-//        props.Aerodynamics.Cnp = config["aero_rate_roll"]["Cnp"].as<double>();
+    //   props.Aerodynamics.Cnp = config["aero_rate_roll"]["Cnp"].as<double>();
 
     /* Yawrate */
 //        props.Aerodynamics.CYr = config["aero_rate_yaw"]["CYr"].as<double>();
-//        props.Aerodynamics.Clr = config["aero_rate_yaw"]["Clr"].as<double>();
+    //    props.Aerodynamics.Clr = config["aero_rate_yaw"]["Clr"].as<double>();
     props.Aerodynamics.Cnr = config["aero_rate_yaw"]["Cnr"].as<double>();
 
 
@@ -298,7 +285,7 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
                             casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                             casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
                             casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                            casadi::SX &Va, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON, casadi::SX &b_Ftether) {
+                            SX &Va_meas, SX &Faero_b, SX &T_b, bool teth_ON, SX &b_Ftether) {
     /** Start of model ============================================================================================= **/
     /* Aircraft Inertia Matrix */
     auto J = SX::diag(SX::vertcat({Ixx, Iyy, Izz}));
@@ -321,18 +308,24 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
 
     /** Aerodynamic (Wind) frame **/
     /* Wind velocity in body frame */
-    SX windDir = (windFrom_deg + 180.0) * M_PI / 180.0;
-    SX g_vW = windSpeed * SX::vertcat({cos(windDir), sin(windDir), 0});
+    SX windFrom = windFrom_deg * M_PI / 180.0;
+    SX g_vW = windSpeed * SX::vertcat({-cos(windFrom), -sin(windFrom), 0});
     SX b_vW = kmath::quat_transform(q_bg, g_vW);
-//    SX b_vW = SX::vertcat({0,0,0});
 
     /* Apparent velocity in body frame, airspeed */
-    SX va = v - b_vW;
-    Va = SX::norm_2(va);
+    SX b_va = v - b_vW;
+    SX Va = SX::norm_2(b_va);
+
+    /* Measured airspeed component (sensor orientation dependent) */
+    SX r_sens = SX::vertcat({0.1, 0.2, -0.05});
+    SX b_va_meas = b_va;// + SX::cross(r_sens, w);
+    SX q_sens_b = kmath::T2quat(5.0 * M_PI / 180.0);
+    SX sens_va = kmath::quat_transform(q_sens_b, b_va_meas);
+    Va_meas = sens_va(0);
 
     /* Aerodynamic angles (angle of attack, side slip angle */
-    SX aoa = atan(va(2) / (va(0) + 1e-4));
-    SX ss = asin(va(1) / (Va + 1e-4));
+    SX aoa = atan(b_va(2) / (b_va(0) + 1e-4));
+    SX ss = asin(b_va(1) / (Va + 1e-4));
 
     /** ---------------------------------------------------------- **/
     /** Aerodynamic Forces and Moments in aerodynamic (wind) frame **/
@@ -409,9 +402,9 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
         SX lon = SX::atan2(-r(1), -r(2));
         SX q_lg = kmath::quat_multiply(kmath::T2quat(-lat), kmath::T1quat(lon));
         SX q_gl = kmath::quat_inverse(q_lg);
-        SX q_la = kmath::quat_multiply(q_lg, kmath::quat_multiply(q, q_ba));
+        SX q_lb = kmath::quat_multiply(q_lg, q);
 
-        SX l_va = kmath::quat_transform(q_la, va);
+        SX l_va = kmath::quat_transform(q_lb, b_va);
         SX l_va_proj = SX::vertcat({l_va(0), l_va(1), 0});
 
         SX q_bl = kmath::quat_multiply(q_bg, q_gl);
@@ -546,7 +539,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     SX v, w, r, q;
     SX T, dE, dR, dA;
     SX v_dot, w_dot, r_dot, q_dot;
-    SX Faero_b, T_b, b_Ftether, Va;
+    SX Va_meas, Faero_b, T_b, b_Ftether;
 
     SX control;
 
@@ -582,7 +575,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 v, w, r, q,
                 T, dE, dR, dA,
                 v_dot, w_dot, r_dot, q_dot,
-                Va, Faero_b, T_b, teth_ON, b_Ftether);
+                Va_meas, Faero_b, T_b, teth_ON, b_Ftether);
 
         control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -618,7 +611,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 v, w, r, q,
                 T, dE, dR, dA,
                 v_dot, w_dot, r_dot, q_dot,
-                Va, Faero_b, T_b, teth_ON, b_Ftether);
+                Va_meas, Faero_b, T_b, teth_ON, b_Ftether);
 
         control = SX::vertcat({T, dE, dR, dA});
     }
@@ -629,7 +622,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
     Function dyn_func = Function("dynamics", {state, control}, {dynamics});
-    Function airspeed_func = Function("airspeed", {state, control}, {Va});
+    Function airspeed_func = Function("airspeed", {state, control}, {Va_meas});
     Function specNongravForce_func = Function("spec_nongrav_force", {state, control},
                                               {(Faero_b + T_b + b_Ftether) / Mass});
     Function specTethForce_func = Function("specTethForce", {state, control}, {b_Ftether / Mass});
@@ -705,7 +698,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     SX v, w, r, q;
     SX T, dE, dR, dA;
     SX v_dot, w_dot, r_dot, q_dot;
-    SX Faero_b, T_b, b_Ftether, Va;
+    SX Va_meas, Faero_b, T_b, b_Ftether;
 
     SX params;
     SX control;
@@ -814,7 +807,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Va, Faero_b, T_b, false, b_Ftether);
+                    Va_meas, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -850,7 +843,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Va, Faero_b, T_b, false, b_Ftether);
+                    Va_meas, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA});
         }
@@ -964,7 +957,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Va, Faero_b, T_b, false, b_Ftether);
+                    Va_meas, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -1000,7 +993,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Va, Faero_b, T_b, false, b_Ftether);
+                    Va_meas, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA});
         }
@@ -1114,7 +1107,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Va, Faero_b, T_b, false, b_Ftether);
+                    Va_meas, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -1150,7 +1143,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Va, Faero_b, T_b, false, b_Ftether);
+                    Va_meas, Faero_b, T_b, false, b_Ftether);
 
 
             control = SX::vertcat({T, dE, dR, dA});
@@ -1285,7 +1278,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                                          v, w, r, q,
                                          T, dE, dR, dA,
                                          v_dot, w_dot, r_dot, q_dot,
-                                         Va, Faero_b, T_b, false, b_Ftether);
+                                         Va_meas, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -1319,7 +1312,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                                              v, w, r, q,
                                              T, dE, dR, dA,
                                              v_dot, w_dot, r_dot, q_dot,
-                                             Va, Faero_b, T_b, false, b_Ftether);
+                                             Va_meas, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA});
         }
@@ -1442,7 +1435,8 @@ void MinimalKiteDynamics::getMinimalModel(GEN &g, GEN &rho,
                                           casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                                           casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
                                           casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                                          casadi::SX &Faero_b, casadi::SX &T_b) {
+                                          casadi::SX &Va, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON,
+                                          casadi::SX &b_Ftether) {
     /** Start of model ============================================================================================= **/
     /* Aircraft Inertia Matrix */
     auto J = SX::diag(SX::vertcat({Ixx, Iyy, Izz}));
@@ -1472,14 +1466,14 @@ void MinimalKiteDynamics::getMinimalModel(GEN &g, GEN &rho,
 
     /* Apparent velocity in body frame, airspeed */
     SX vA = v - b_vW;
-    SX Va = SX::norm_2(vA);
+    Va = SX::norm_2(vA);
 
     /* Aerodynamic angles (angle of attack, side slip angle */
     SX aoa = atan(vA(2) / (vA(0) + 1e-4));
     SX ss = asin(vA(1) / (Va + 1e-4));
 
     /** ---------------------------------------------------------- **/
-    /** Aerodynamic Forces and Moments in aerodynamic (wind) frame **/
+    /** Aerodynamic Forces and Moments in stability frame **/
     /** ---------------------------------------------------------- **/
     SX dyn_press = 0.5 * rho * Va * Va;
     SX CL = CL0 + CLa * aoa;
@@ -1491,7 +1485,7 @@ void MinimalKiteDynamics::getMinimalModel(GEN &g, GEN &rho,
 
     SX SF = dyn_press * S * CYb * ss;
 
-    SX a_Faero = SX::vertcat({-DRAG, SF, -LIFT});
+    SX s_Faero = SX::vertcat({-DRAG, SF, -LIFT});
 
     /** Moments about x, y, z axes: L, M, N **/
     SX L = dyn_press * S * b * (Clb * ss +
@@ -1505,15 +1499,15 @@ void MinimalKiteDynamics::getMinimalModel(GEN &g, GEN &rho,
                                 b / (2.0 * Va) * Cnr * w(2) +
                                 Cndr * dR);
 
-    SX a_Maero = SX::vertcat({L, M, N});
+    SX s_Maero = SX::vertcat({L, M, N});
 
     /** Aerodynamic Forces and Moments in body frame **/
     /* XFLR5 gives coefficients in stability frame */
     // To get from stability axis to body, rotate by aoa
     SX q_bs = kmath::T2quat(aoa);
 
-    Faero_b = kmath::quat_transform(q_bs, a_Faero);
-    auto b_Maero = kmath::quat_transform(q_bs, a_Maero);
+    Faero_b = kmath::quat_transform(q_bs, s_Faero);
+    auto b_Maero = kmath::quat_transform(q_bs, s_Maero);
 
     /** ---------------------------------------- **/
     /** Gravitation, Thrust, Tether (body frame) **/
@@ -1527,7 +1521,7 @@ void MinimalKiteDynamics::getMinimalModel(GEN &g, GEN &rho,
     T_b = T * (p1 * Va * Va + p2 * Va + 1.0) * SX::vertcat({1, 0, 0});  // T is the static thrust (at zero airspeed)
 
     /** Tether force and moment **/
-    SX b_Ftether = SX::vertcat({0, 0, 0});
+    b_Ftether = SX::vertcat({0, 0, 0});
 
     SX tether_outlet_position = SX::vertcat({0, 0, 0.05});
     SX b_Mtether = SX::cross(tether_outlet_position, b_Ftether);
@@ -1556,7 +1550,7 @@ void MinimalKiteDynamics::getMinimalModel(GEN &g, GEN &rho,
 }
 
 MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const AlgorithmProperties &AlgoProps,
-                                         const bool controlsIncludeWind) {
+                                         const bool teth_ON, const bool controlsIncludeWind) {
 
     /** enviromental constants */
     double g = 9.80665; /** gravitational acceleration [m/s2] [WGS84] */
@@ -1596,23 +1590,18 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
     /* Sideslip */
     double CYb = kiteProps.Aerodynamics.CYb;
 
-//    double Cl0 = kiteProps.Aerodynamics.Cl0;
     double Clb = kiteProps.Aerodynamics.Clb;
 
-//    double Cn0 = kiteProps.Aerodynamics.Cn0;
     double Cnb = kiteProps.Aerodynamics.Cnb;
 
     /* Pitchrate */
-//    double CLq = kiteProps.Aerodynamics.CLq;
 //    double Cmq = kiteProps.Aerodynamics.Cmq;
 
     /* Rollrate */
-//    double CYp = kiteProps.Aerodynamics.CYp;
     double Clp = kiteProps.Aerodynamics.Clp;
 //    double Cnp = kiteProps.Aerodynamics.Cnp;
 
     /* Yawrate */
-//    double CYr = kiteProps.Aerodynamics.CYr;
 //    double Clr = kiteProps.Aerodynamics.Clr;
     double Cnr = kiteProps.Aerodynamics.Cnr;
 
@@ -1621,16 +1610,12 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
     /** Aerodynamic effects of control **/
     /** ------------------------------ **/
     /* Elevator */
-//    double CLde = kiteProps.Aerodynamics.CLde;
     double Cmde = kiteProps.Aerodynamics.Cmde;
 
     /* Ailerons */
     double Clda = kiteProps.Aerodynamics.Clda;
-//    double Cnda = kiteProps.Aerodynamics.Cnda;
 
     /* Rudder */
-//    double CYdr = kiteProps.Aerodynamics.CYdr;
-//    double Cldr = kiteProps.Aerodynamics.Cldr;
     double Cndr = kiteProps.Aerodynamics.Cndr;
 
     /** ------------------------------ **/
@@ -1647,7 +1632,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
     SX v, w, r, q;
     SX T, dE, dR, dA;
     SX v_dot, w_dot, r_dot, q_dot;
-    SX Faero_b, T_b;
+    SX Va, Faero_b, T_b, b_Ftether;
 
     SX control;
 
@@ -1683,7 +1668,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
                 v, w, r, q,
                 T, dE, dR, dA,
                 v_dot, w_dot, r_dot, q_dot,
-                Faero_b, T_b);
+                Va, Faero_b, T_b, teth_ON, b_Ftether);
 
         control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -1719,7 +1704,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
                 v, w, r, q,
                 T, dE, dR, dA,
                 v_dot, w_dot, r_dot, q_dot,
-                Faero_b, T_b);
+                Va, Faero_b, T_b, teth_ON, b_Ftether);
 
         control = SX::vertcat({T, dE, dR, dA});
     }
@@ -1730,7 +1715,10 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
 
     Function dyn_func = Function("dynamics", {state, control}, {dynamics});
-    Function specNongravForce_func = Function("spec_nongrav_force", {state, control}, {(Faero_b + T_b) / Mass});
+    Function airspeed_func = Function("airspeed", {state, control}, {Va});
+    Function specNongravForce_func = Function("spec_nongrav_force", {state, control},
+                                              {(Faero_b + T_b + b_Ftether) / Mass});
+    Function specTethForce_func = Function("specTethForce", {state, control}, {b_Ftether / Mass});
 
     /** compute dynamics state Jacobian */
     SX d_jacobian = SX::jacobian(dynamics, state);
@@ -1763,7 +1751,9 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
     this->SymJacobian = d_jacobian;
 
     this->NumDynamics = dyn_func;
+    this->NumAirspeed = airspeed_func;
     this->NumSpecNongravForce = specNongravForce_func;
+    this->NumSpecTethForce = specTethForce_func;
     this->NumJacobian = dyn_jac;
 
     /** return integrator function */
@@ -1801,7 +1791,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
     SX v, w, r, q;
     SX T, dE, dR, dA;
     SX v_dot, w_dot, r_dot, q_dot;
-    SX Faero_b, T_b;
+    SX Va, Faero_b, T_b, b_Ftether;
 
     SX params;
     SX control;
@@ -1911,7 +1901,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Faero_b, T_b);
+                    Va, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -1947,7 +1937,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Faero_b, T_b);
+                    Va, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA});
         }
@@ -2062,7 +2052,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Faero_b, T_b);
+                    Va, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -2098,7 +2088,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Faero_b, T_b);
+                    Va, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA});
         }
@@ -2212,7 +2202,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Faero_b, T_b);
+                    Va, Faero_b, T_b, false, b_Ftether);
 
             control = SX::vertcat({T, dE, dR, dA, windFrom_deg, windSpeed});
 
@@ -2248,7 +2238,7 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
                     v, w, r, q,
                     T, dE, dR, dA,
                     v_dot, w_dot, r_dot, q_dot,
-                    Faero_b, T_b);
+                    Va, Faero_b, T_b, false, b_Ftether);
 
 
             control = SX::vertcat({T, dE, dR, dA});
@@ -2483,10 +2473,6 @@ MinimalKiteDynamics::MinimalKiteDynamics(const KiteProperties &kiteProps, const 
         this->NumIntegrator = RK4_INT;
         */
 }
-
-
-
-
 
 
 

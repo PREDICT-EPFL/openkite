@@ -12,7 +12,6 @@ struct WindProperties {
     double WindFrom_deg{180.0};
     double WindSpeed{0.0};
 };
-
 struct PlaneGeometry {
     //double imuPitchOffset_deg;
 
@@ -21,7 +20,6 @@ struct PlaneGeometry {
     double aspectRatio;
     double wingSurfaceArea;
 };
-
 struct PlaneInertia {
     double mass;
     double Ixx;
@@ -29,7 +27,6 @@ struct PlaneInertia {
     double Izz;
     double Ixz;
 };
-
 struct PlaneAerodynamics {
     double e_oswald;
 
@@ -87,7 +84,6 @@ struct PlaneAerodynamics {
     double Cldr;
     double Cndr;
 };
-
 struct TetherProperties {
     double length;
     double Ks;
@@ -96,7 +92,6 @@ struct TetherProperties {
     double ry;
     double rz;
 };
-
 struct KiteProperties {
     std::string name;
     WindProperties Wind;
@@ -110,7 +105,6 @@ struct AlgorithmProperties {
     IntType Integrator;
     double sampling_time;
 };
-
 
 namespace kite_utils {
     /** load properties from a YAML file */
@@ -223,7 +217,7 @@ public:
                   casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                   casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
                   casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                  casadi::SX &Va, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON, casadi::SX &b_Ftether);
+                  casadi::SX &Va_meas, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON, casadi::SX &b_Ftether);
 
 private:
     //state variables
@@ -260,7 +254,7 @@ public:
 
     //constructor
     MinimalKiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
-                        const bool controlsIncludeWind = false);
+                        const bool teth_ON, const bool controlsIncludeWind = false);
 
     MinimalKiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
                         const kite_utils::IdentMode &identMode,
@@ -272,25 +266,18 @@ public:
 
     /** public methods */
     casadi::SX getSymbolicState() { return this->State; }
-
     casadi::SX getSymbolicControl() { return this->Control; }
-
     casadi::SX getSymbolicParameters() { return this->Parameters; }
-
     casadi::SX getSymbolicDynamics() { return this->SymDynamics; }
-
     casadi::SX getSymbolicIntegrator() { return this->SymIntegartor; }
-
     casadi::SX getSymbolicJacobian() { return this->SymJacobian; }
 
     casadi::Function getNumericDynamics() { return this->NumDynamics; }
-
-    casadi::Function getNumericNumSpecNongravForce() { return this->NumSpecNongravForce; }
-
+    casadi::Function getNumericAirspeed() { return this->NumAirspeed; }
+    casadi::Function getNumericSpecNongravForce() { return this->NumSpecNongravForce; }
+    casadi::Function getNumericSpecTethForce() { return this->NumSpecTethForce; }
     casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
-
     casadi::Function getNumericJacobian() { return this->NumJacobian; }
-
     casadi::Function getAeroDynamicForces() { return this->AeroDynamics; }
 
     /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
@@ -345,7 +332,7 @@ public:
                          casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                          casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
                          casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                         casadi::SX &Faero_b, casadi::SX &T_b);
+                         casadi::SX &Va_meas, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON, casadi::SX &b_Ftether);
 
 private:
     //state variables
@@ -363,8 +350,12 @@ private:
 
     //numerical dynamics evaluation
     casadi::Function NumDynamics;
+    //numerical airspeed evaluation
+    casadi::Function NumAirspeed;
     //numerical specific nongravitational force evaluation
     casadi::Function NumSpecNongravForce;
+    //numerical tether force evaluation
+    casadi::Function NumSpecTethForce;
     //numerical integral evaluation
     casadi::Function NumIntegrator;
     //numerical jacobian evaluation
