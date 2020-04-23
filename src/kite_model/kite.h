@@ -9,7 +9,7 @@
 #include <fstream>
 
 struct WindProperties {
-    double WindFrom_deg{180.0};
+    double WindFrom{M_PI};
     double WindSpeed{0.0};
 };
 struct PlaneGeometry {
@@ -107,32 +107,32 @@ struct AlgorithmProperties {
 };
 
 namespace kite_utils {
-    /** load properties from a YAML file */
-    KiteProperties LoadProperties(const std::string &filename);
+/** load properties from a YAML file */
+KiteProperties LoadProperties(const std::string &filename);
 
-    KiteProperties LoadMinimalProperties(const std::string &filename);
+KiteProperties LoadMinimalProperties(const std::string &filename);
 
 
-    /** architecture-dependend time stamping */
-    typedef std::chrono::time_point<std::chrono::system_clock> time_point;
+/** architecture-dependend time stamping */
+typedef std::chrono::time_point<std::chrono::system_clock> time_point;
 
-    time_point get_time();
+time_point get_time();
 
-    /** write a DM vector to a file */
-    void write_to_file(const std::string &filename, const casadi::DM &data);
+/** write a DM vector to a file */
+void write_to_file(const std::string &filename, const casadi::DM &data);
 
-    /** read a vector from a file */
-    casadi::DM read_from_file(const std::string &filename);
+/** read a vector from a file */
+casadi::DM read_from_file(const std::string &filename);
 
-    /** check if file exists */
-    bool file_exists(const std::string &filename);
+/** check if file exists */
+bool file_exists(const std::string &filename);
 
-    enum IdentMode {
-        LONGITUDINAL,
-        LATERAL,
-        YAW,
-        COMPLETE
-    };
+enum IdentMode {
+    LONGITUDINAL,
+    LATERAL,
+    YAW,
+    COMPLETE
+};
 }
 
 class KiteDynamics {
@@ -158,7 +158,8 @@ public:
     casadi::SX getSymbolicJacobian() { return this->SymJacobian; }
 
     casadi::Function getNumericDynamics() { return this->NumDynamics; }
-    casadi::Function getNumericAirspeed() { return this->NumAirspeed; }
+    casadi::Function getNumericAirspeedMeas() { return this->NumAirspeedMeasured; }
+    casadi::Function getNumericAeroValues() { return this->NumAeroValues; }
     casadi::Function getNumericSpecNongravForce() { return this->NumSpecNongravForce; }
     casadi::Function getNumericSpecTethForce() { return this->NumSpecTethForce; }
     casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
@@ -168,7 +169,7 @@ public:
     /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
     template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
     void getModel(GEN &g, GEN &rho,
-                  W &windFrom_deg, W &windSpeed,
+                  W &windFrom, W &windSpeed,
                   GEN &b, GEN &c, GEN &AR, GEN &S,
                   GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
@@ -217,7 +218,8 @@ public:
                   casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                   casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
                   casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                  casadi::SX &Va_meas, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON, casadi::SX &b_Ftether);
+                  casadi::SX &Va_pitot, casadi::SX &Va, casadi::SX &alpha, casadi::SX &beta,
+                  casadi::SX &b_F_aero, casadi::SX &b_F_thrust, bool teth_ON, casadi::SX &b_F_tether);
 
 private:
     //state variables
@@ -236,7 +238,9 @@ private:
     //numerical dynamics evaluation
     casadi::Function NumDynamics;
     //numerical airspeed evaluation
-    casadi::Function NumAirspeed;
+    casadi::Function NumAirspeedMeasured;
+    //numerical aero values
+    casadi::Function NumAeroValues;
     //numerical specific nongravitational force evaluation
     casadi::Function NumSpecNongravForce;
     //numerical tether force evaluation
@@ -273,7 +277,8 @@ public:
     casadi::SX getSymbolicJacobian() { return this->SymJacobian; }
 
     casadi::Function getNumericDynamics() { return this->NumDynamics; }
-    casadi::Function getNumericAirspeed() { return this->NumAirspeed; }
+    casadi::Function getNumericAirspeedMeas() { return this->NumAirspeedMeasured; }
+    casadi::Function getNumericAeroValues() { return this->NumAeroValues; }
     casadi::Function getNumericSpecNongravForce() { return this->NumSpecNongravForce; }
     casadi::Function getNumericSpecTethForce() { return this->NumSpecTethForce; }
     casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
@@ -283,7 +288,7 @@ public:
     /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
     template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
     void getMinimalModel(GEN &g, GEN &rho,
-                         W &windFrom_deg, W &windSpeed,
+                         W &windFrom, W &windSpeed,
                          GEN &b, GEN &c, GEN &AR, GEN &S,
                          GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
@@ -332,7 +337,8 @@ public:
                          casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                          casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
                          casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                         casadi::SX &Va_meas, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON, casadi::SX &b_Ftether);
+                         casadi::SX &Va_pitot, casadi::SX &Va, casadi::SX &alpha, casadi::SX &beta,
+                         casadi::SX &b_F_aero, casadi::SX &b_F_thrust, bool teth_ON, casadi::SX &b_F_tether);
 
 private:
     //state variables
@@ -351,7 +357,9 @@ private:
     //numerical dynamics evaluation
     casadi::Function NumDynamics;
     //numerical airspeed evaluation
-    casadi::Function NumAirspeed;
+    casadi::Function NumAirspeedMeasured;
+    //numerical aero values
+    casadi::Function NumAeroValues;
     //numerical specific nongravitational force evaluation
     casadi::Function NumSpecNongravForce;
     //numerical tether force evaluation

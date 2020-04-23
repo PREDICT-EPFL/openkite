@@ -54,7 +54,7 @@ BOOST_AUTO_TEST_SUITE(kite_model_suite_test)
             id_wind_file >> windFrom_deg;
             id_wind_file >> windSpeed;
 
-            kite_props.Wind.WindFrom_deg = windFrom_deg;
+            kite_props.Wind.WindFrom = windFrom_deg * M_PI/180.0;
             kite_props.Wind.WindSpeed = windSpeed;
         } else {
             std::cout << "Could not open : id wind data file \n";

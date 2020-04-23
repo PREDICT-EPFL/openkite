@@ -424,7 +424,7 @@ void get_kiteDynamics(KiteProperties &kite_props, const double &windFrom_deg, co
 
                       KiteDynamics &kite, KiteDynamics &kite_int) {
 
-    kite_props.Wind.WindFrom_deg = windFrom_deg;
+    kite_props.Wind.WindFrom = windFrom_deg * M_PI / 180.0;
     kite_props.Wind.WindSpeed = windSpeed;
 
     AlgorithmProperties algo_props;
@@ -440,7 +440,7 @@ void get_minimalKiteDynamics(KiteProperties &kite_props, const double &windFrom_
 
                              MinimalKiteDynamics &kite, MinimalKiteDynamics &kite_int) {
 
-    kite_props.Wind.WindFrom_deg = windFrom_deg;
+    kite_props.Wind.WindFrom = windFrom_deg * M_PI / 180.0;
     kite_props.Wind.WindSpeed = windSpeed;
 
     AlgorithmProperties algo_props;
@@ -1107,7 +1107,7 @@ int main() {
     const int dimx = 13;  // v(3) w(3) r(3) q(4)
 
     const bool controlsIncludeWind = false;
-    const int dimu = 4;   // T elev rud ail + windFrom_deg windSpeed
+    const int dimu = 4;   // T elev rud ail + windFrom windSpeed
 
     /// 1. Identification mode ///
     /// For minimal model, also comment... #minimalmodel ///
