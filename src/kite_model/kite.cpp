@@ -317,19 +317,15 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     Va = SX::norm_2(b_va);
 
     /* Measured airspeed component (pitot tube orientation dependent) */
-    /* //    SX r_sens = SX::vertcat({0.1, 0.2, -0.05});
-     * //    SX b_va_meas = b_va + SX::cross(r_sens, w);
-     * // At fast body yawrates. the body rotation (thus pitot tube is faster than the CoG) is clearly negligible
-     * // under the effect of the pitot measurement direction being rotated out of the airflow (sideslip)
-     * */
+    SX r_sens = SX::vertcat({0.11, 0.22, -0.05});
+    SX b_va_meas = b_va + SX::cross(r_sens, w);
+    /* At fast body yawrates, the body rotation (thus pitot tube is faster than the CoG) is clearly negligible
+     * under the effect of the pitot measurement direction being rotated out of the airflow (sideslip) */
 
-    /* //    SX q_sens_b = kmath::T2quat(5.0 * M_PI / 180.0);
-     * //    SX sens_va = kmath::quat_transform(q_sens_b, b_va_meas);
-     * //    Va_pitot = sens_va(0);
-     * // Also, the 5-degree angle of the pitot makes 0.5 percent error. So we take the body x-direction as
-     * airspeed measurement, which decreases at any sidelip angle.
-     * */
-    Va_pitot = b_va(0);
+    /* Pitot tube is oriented about 5 degress above body x axes */
+    SX q_sens_b = kmath::T2quat(5.0 * M_PI / 180.0);
+    SX sens_va = kmath::quat_transform(q_sens_b, b_va_meas);
+    Va_pitot = sens_va(0);
 
     /* Aerodynamic angles (angle of attack, side slip angle */
     alpha = atan(b_va(2) / (b_va(0))); // + 1e-4));
@@ -981,7 +977,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             control = SX::vertcat({T, dE, dR, dA, windFrom, windSpeed});
 
         } else {
-            double windFrom = kiteProps.Wind.WindFrom ;
+            double windFrom = kiteProps.Wind.WindFrom;
             double windSpeed = kiteProps.Wind.WindSpeed;
 
             /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
@@ -1096,7 +1092,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                              }); // 13 lateral parameters (Rudder control only)
 
         if (controlsIncludeWind) {
-            SX windFrom = SX::sym("windFrom") ;
+            SX windFrom = SX::sym("windFrom");
             SX windSpeed = SX::sym("windSpeed");
 
             /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
@@ -1489,7 +1485,7 @@ void MinimalKiteDynamics::getMinimalModel(GEN &g, GEN &rho,
     Va = SX::norm_2(b_va);
 
     /* Measured airspeed component (pitot tube orientation dependent) */
-    /* //    SX r_sens = SX::vertcat({0.1, 0.2, -0.05});
+    /* //    SX r_sens = SX::vertcat({0.11, 0.21, -0.05});
      * //    SX b_va_meas = b_va + SX::cross(r_sens, w);
      * // At fast body yawrates. the body rotation (thus pitot tube is faster than the CoG) is clearly negligible
      * // under the effect of the pitot measurement direction being rotated out of the airflow (sideslip)

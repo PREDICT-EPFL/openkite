@@ -353,14 +353,14 @@ void get_costMatrix(const kite_utils::IdentMode identMode, bool useEulerAngles,
         } else if (identMode == kite_utils::IdentMode::LATERAL) {
 
             Q = SX::diag(SX({10, 100, 10,   // vx vy vz
-                             100, 10, 100,   // wx wy wz
+                             100, 100, 100,   // wx wy wz
                              10, 10, 10,   // x y z
                              100, 10, 100}));   //roll qy yaw
 
         } else if (identMode == kite_utils::IdentMode::YAW) {
 
-            Q = SX::diag(SX({100, 50, 10,   // vx vy vz
-                             100, 10, 100,   // wx wy wz
+            Q = SX::diag(SX({100, 50, 50,   // vx vy vz
+                             100, 100, 100,   // wx wy wz
                              10, 10, 10,   // x y z
                              100, 10, 100}));   //roll qy yaw
 
@@ -373,7 +373,7 @@ void get_costMatrix(const kite_utils::IdentMode identMode, bool useEulerAngles,
         scalingMat = SX::diag(SX({1.0 / 20, 1.0 / 3, 1.0 / 5,   // vx vy vz
                                   1.0 / 3.14, 1.0 / 3.14, 1.0 / 3.14,   // wx wy wz
                                   1.0 / 30, 1.0 / 30, 1.0 / 30,   // x y z
-                                  1.0 / 1.047, 1.0 / 1, 1.0 / 0.785}));   //roll qy yaw
+                                  1.0 / 1.047, 1.0, 1.0 / 0.785}));   //roll qy yaw
 
     } else {
         /* Default */
@@ -451,25 +451,47 @@ void get_minimalKiteDynamics(KiteProperties &kite_props, const double &windFrom_
     kite_int = MinimalKiteDynamics(kite_props, algo_props, controlsIncludeWind); //integration model
 }
 
+
 void substitute_quat2euler(SX &state) {
 
-    SX qw = state(9);
-    SX qx = state(10);
-    SX qy = state(11);
-    SX qz = state(12);
+//    SX qw = state(9);
+//    SX qx = state(10);
+//    SX qy = state(11);
+//    SX qz = state(12);
+//
+//    /* MATLAB quat2eul function, Copyright 2014-2017 The MathWorks, Inc. */
+//
+//    // Not differentiable -> Keep qy instead
+////    SX aSinInput = -2 * (qx * qz - qw * qy);
+////    aSinInput = SX::fmin(aSinInput, 1);
+////    aSinInput = SX::fmax(aSinInput, -1);
+////    SX pitch = §z§(aSinInput);
+//
+//    SX yaw = atan2(2 * (qx * qy + qw * qz), qw * qw + qx * qx - qy * qy - qz * qz);
+//    SX roll = atan2(2 * (qy * qz + qw * qx), qw * qw - qx * qx - qy * qy + qz * qz);
+//
+//    state = SX::vertcat({state(Slice(0, 9)), roll, qy, yaw});
 
-    /* MATLAB quat2eul function, Copyright 2014-2017 The MathWorks, Inc. */
 
-    // Not differentiable -> Keep qy instead
-//    SX aSinInput = -2 * (qx * qz - qw * qy);
-//    aSinInput = SX::fmin(aSinInput, 1);
-//    aSinInput = SX::fmax(aSinInput, -1);
-//    SX pitch = asin(aSinInput);
+    SX q1 = state(10); // qx
+    SX q2 = state(11); // qy
+    SX q3 = state(12); // qz
+    SX q4 = state(9);  // qw
 
-    SX yaw = atan2(2 * (qx * qy + qw * qz), qw * qw + qx * qx - qy * qy - qz * qz);
-    SX roll = atan2(2 * (qy * qz + qw * qx), qw * qw - qx * qx - qy * qy + qz * qz);
+    /* Relevant components of the Direction Cosine Matrix */
+    SX T_bg_23 = 2 * (q2 * q3 + q4 * q1);
+    SX T_bg_33 = 2 * (q4 * q4 + q3 * q3) - 1;
+    SX roll = atan2(T_bg_23, T_bg_33);  // roll
 
-    state = SX::vertcat({state(Slice(0, 9)), roll, qy, yaw});
+//    SX T_bg_13 = 2 * (q1 * q3 - q4 * q2);
+//    SX pitch = -asin(T_bg_13);          // pitch -> Leads to NaN
+
+    SX T_bg_12 = 2 * (q1 * q2 + q4 * q3);
+    SX T_bg_11 = 2 * (q4 * q4 + q1 * q1) - 1;
+    SX yaw = atan2(T_bg_12, T_bg_11);   // yaw
+
+//    state = SX::vertcat({state(Slice(0, 9)), roll, pitch, yaw});
+    state = SX::vertcat({state(Slice(0, 9)), roll, q2, yaw});
 }
 
 void create_nlpSolver(const SX &opt_var, const SX &fitting_error, const SX &diff_constr,
@@ -505,32 +527,35 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
     if (identMode == kite_utils::IdentMode::LONGITUDINAL) {
 
         /** All at once, allowing negative Cm0 (due to high wing setting angle) **/
-        const double relBound = 0.7;
+        const double relUpBound = 0.7;
+        const double relLwBound = 0.9;
 
-        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -relBound, relBound);
+        paramList.emplace_back("aero", "CD0", kiteProps.Aerodynamics.CD0, -relLwBound, relUpBound);
 
         /* AOA */
-        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relBound, relBound);
-        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relBound, relBound);
+        paramList.emplace_back("aero_aoa", "CL0", kiteProps.Aerodynamics.CL0, -relLwBound, relUpBound);
+        paramList.emplace_back("aero_aoa", "CLa", kiteProps.Aerodynamics.CLa, -relLwBound, relUpBound);
 
-        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.1, 0.03, true);
-        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relBound, relBound);
+        paramList.emplace_back("aero_aoa", "Cm0", kiteProps.Aerodynamics.Cm0, -0.1, 0.1, true);
+        paramList.emplace_back("aero_aoa", "Cma", kiteProps.Aerodynamics.Cma, -relLwBound, relUpBound);
 
 
         /* Pitchrate */
-        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -relBound, relBound);
-        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -relBound, relBound);
+        paramList.emplace_back("aero_rate_pitch", "CLq", kiteProps.Aerodynamics.CLq, -relLwBound, relUpBound);
+        paramList.emplace_back("aero_rate_pitch", "Cmq", kiteProps.Aerodynamics.Cmq, -relLwBound, relUpBound);
 
 
         /* Elevator */
-        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -0.3, 0.3);
-        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -0.3, 0.3);
+        paramList.emplace_back("aero_ctrl_elev", "CLde", kiteProps.Aerodynamics.CLde, -relLwBound, relUpBound);
+        paramList.emplace_back("aero_ctrl_elev", "Cmde", kiteProps.Aerodynamics.Cmde, -relLwBound, relUpBound);
         // 9 longitudinal parameters
 
     } else if (identMode == kite_utils::IdentMode::LATERAL) {
 
-        double relUpBound = 0.7;
-        double relLwBound = 0.9;
+        const double relUpBound = 0.7;
+        const double relLwBound = 0.9;
+//        const double relUpBound = 0;
+//        const double relLwBound = 0;
 
         /* Sideslip */
         paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relLwBound, relUpBound);
@@ -560,27 +585,29 @@ void setup_optimizationParameters(const KiteProperties &kiteProps,
 
     } else if (identMode == kite_utils::IdentMode::YAW) {
 
-        double relUpBound = 0.7;
-        double relLwBound = 0.9;
+        const double relUpBound = 0.7;
+        const double relLwBound = 0.9;
+//        const double relUpBound = 0;
+//        const double relLwBound = 0;
 
         /* Sideslip */
         paramList.emplace_back("aero_ss", "CYb", kiteProps.Aerodynamics.CYb, -relLwBound, relUpBound);
 
         paramList.emplace_back("aero_ss", "Clb", kiteProps.Aerodynamics.Clb, -relLwBound, relUpBound);
 
-        paramList.emplace_back("aero_ss", "Cn0", kiteProps.Aerodynamics.Cn0, 0, 0); //fixed
+        paramList.emplace_back("aero_ss", "Cn0", kiteProps.Aerodynamics.Cn0, -relLwBound, relUpBound);
         paramList.emplace_back("aero_ss", "Cnb", kiteProps.Aerodynamics.Cnb, -relLwBound, relUpBound);
 
 
         /* Rollrate */
         paramList.emplace_back("aero_rate_roll", "CYp", kiteProps.Aerodynamics.CYp, -relLwBound, relUpBound);
-        paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -0, 0);
-        paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -0, 0);
+        paramList.emplace_back("aero_rate_roll", "Clp", kiteProps.Aerodynamics.Clp, -relLwBound, relUpBound);
+        paramList.emplace_back("aero_rate_roll", "Cnp", kiteProps.Aerodynamics.Cnp, -relLwBound, relUpBound);
 
         /* Yawrate */
         paramList.emplace_back("aero_rate_yaw", "CYr", kiteProps.Aerodynamics.CYr, -relLwBound, relUpBound);
-        paramList.emplace_back("aero_rate_yaw", "Clr", kiteProps.Aerodynamics.Clr, -0, 0);
-        paramList.emplace_back("aero_rate_yaw", "Cnr", kiteProps.Aerodynamics.Cnr, -0, 0);
+        paramList.emplace_back("aero_rate_yaw", "Clr", kiteProps.Aerodynamics.Clr, -relLwBound, relUpBound);
+        paramList.emplace_back("aero_rate_yaw", "Cnr", kiteProps.Aerodynamics.Cnr, -relLwBound, relUpBound);
 
 
         /* Rudder */
@@ -1101,7 +1128,7 @@ int main() {
 
     /// 5 lines to adapt by the user =============================================================================== ///
 
-    std::string flightDataDir = "/home/johannes/identification/processed_flight_data/";
+    const std::string flightDataDir = "/home/johannes/identification/processed_flight_data/";
 
     /// State and Control dimensions ///
     const int dimx = 13;  // v(3) w(3) r(3) q(4)
@@ -1112,70 +1139,77 @@ int main() {
     /// 1. Identification mode ///
     /// For minimal model, also comment... #minimalmodel ///
 
-//    // roll / lateral
-//    const kite_utils::IdentMode identMode = kite_utils::IdentMode::LATERAL;
-//    const int dimp = 12; // full model
-////    const int dimp = 6; // minimal model
-//    const bool useMinimalModel = false;
+    // 9-second manual ID
+//    const std::string identManeuver = "manual_id";
+//    const int DATA_POINTS = 241;
+//    const int poly_order = 3;
+//    const int num_segments = 80;
+
+    /* roll / lateral */
+    const kite_utils::IdentMode identMode = kite_utils::IdentMode::LATERAL;
+    const int dimp = 12; // full model
+//    const int dimp = 6; // minimal model
+    const bool useMinimalModel = false;
+    const bool useEulerAnglesForCostFunction = true;
 //
-//    const bool useEulerAnglesForCostFunction = true;
+    const std::string identManeuver = "identRoll";
 //    const int DATA_POINTS = 127;
 //    const int poly_order = 3;
 //    const int num_segments = 42;
+    const int DATA_POINTS = 235; // 'longRoll': IDENTROLL + 2.5 seconds
+    const int poly_order = 3;
+    const int num_segments = 78;
 
 
-//    // pitch / longitudinal
+    /* pitch / longitudinal */
 //    const kite_utils::IdentMode identMode = kite_utils::IdentMode::LONGITUDINAL;
 //    const int dimp = 9; // full model
 ////    const int dimp = 7; // minimal model
 //    const bool useMinimalModel = false;
+//    const bool useEulerAnglesForCostFunction = true;
 //
-//    const bool useEulerAnglesForCostFunction = false;
+//    const std::string identManeuver = "identPitch";
 //    const int DATA_POINTS = 148;
 //    const int poly_order = 3;
 //    const int num_segments = 49;
+//    const int DATA_POINTS = 268; // 'longPitch': IDENTPITCH + 2.7 seconds
+//    const int poly_order = 3;
+//    const int num_segments = 89;
 
 //    const int DATA_POINTS = 1261;
 //    const int num_segments = 420;
 
-    // yaw
-    const kite_utils::IdentMode identMode = kite_utils::IdentMode::YAW;
-    const int dimp = 13; // full model
-//    const int dimp = 6; // minimal model
-    const bool useMinimalModel = false;
+    /* yaw */
+//    const kite_utils::IdentMode identMode = kite_utils::IdentMode::YAW;
+//    const int dimp = 13; // full model
+////    const int dimp = 6; // minimal model
+//    const bool useMinimalModel = false;
+//    const bool useEulerAnglesForCostFunction = true;
+//
+//    const std::string identManeuver = "identYaw";
+//    const int DATA_POINTS = 106;
+//    const int poly_order = 3;
+//    const int num_segments = 35;
+//    const int DATA_POINTS = 214; // 'longYaw': IDENTYAW + 2.5 seconds
+//    const int poly_order = 3;
+//    const int num_segments = 71;
 
-    const bool useEulerAnglesForCostFunction = true;
-    const int DATA_POINTS = 106;
-    const int poly_order = 3;
-    const int num_segments = 35;
 
-
-//    // complete
+//    /* complete */
 //    const kite_utils::IdentMode identMode = kite_utils::IdentMode::COMPLETE;
 //    const int dimp = 25; // full model
 ////    const int dimp = 6; // minimal model
 //    const bool useMinimalModel = false;
-//
 //    const bool useEulerAnglesForCostFunction = false;
+//
+//    const std::string identManeuver = "manual_id";
 //    const int DATA_POINTS = 1261;
 //    const int poly_order = 3;
 //    const int num_segments = 420;
 
-
     const int n_optimizationFailed_max = 3;
 
     /// ============================================================================================================ ///
-    std::string identManeuver;
-    if (identMode == kite_utils::IdentMode::LONGITUDINAL) {
-        identManeuver = "identPitch";
-    } else if (identMode == kite_utils::IdentMode::LATERAL) {
-        identManeuver = "identRoll";
-    } else if (identMode == kite_utils::IdentMode::YAW) {
-        identManeuver = "identYaw";
-    } else if (identMode == kite_utils::IdentMode::COMPLETE) {
-        identManeuver = "manual_id";
-    }
-
     std::cout << "\nRunning " << identManeuver << " identification of " << dimp << " parameters with "
               << DATA_POINTS << " data points.\n";
 
@@ -1545,7 +1579,7 @@ int main() {
 
             /* Check on max iteration steps */
             if (i_optimization_failed >= n_optimizationFailed_max) {
-                std::cout << "Optimization failed to many times. Stopping iterations on this sequence. \n";
+                std::cout << "Optimization failed too many times. Stopping iterations on this sequence. \n";
                 iIt = nIt;
                 continue;
             }
