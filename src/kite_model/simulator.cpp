@@ -159,10 +159,11 @@ int main(int argc, char **argv) {
 
     double windFrom_deg{180};
     n.param<double>("windFrom_deg", windFrom_deg, 180.0);
-    kite_props.Wind.WindFrom = windFrom_deg * M_PI / 180.0;
-    n.param<double>("windSpeed", kite_props.Wind.WindSpeed, 0.0);
+    kite_props.atmosphere.WindFrom = windFrom_deg * M_PI / 180.0;
+    n.param<double>("windSpeed", kite_props.atmosphere.WindSpeed, 0.0);
+    kite_props.atmosphere.airDensity = 1.1589; // Standard atmosphere at 468 meters
 
-    std::cout << "Simulator: Wind from " << windFrom_deg << " deg at " << kite_props.Wind.WindSpeed << " m/s.\n";
+    std::cout << "Simulator: Wind from " << windFrom_deg << " deg at " << kite_props.atmosphere.WindSpeed << " m/s.\n";
 
     bool simulate_tether;
     n.param<bool>("simulate_tether", simulate_tether, false);
@@ -172,8 +173,8 @@ int main(int argc, char **argv) {
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
-    KiteDynamics kite = KiteDynamics(kite_props, algo_props, simulate_tether, false);
-//    MinimalKiteDynamics kite = MinimalKiteDynamics(kite_props, algo_props, false);
+    KiteDynamics kite = KiteDynamics(kite_props, algo_props, simulate_tether);
+//    MinimalKiteDynamics kite = MinimalKiteDynamics(kite_props, algo_props);
 
     int broadcast_state;
     n.param<int>("broadcast_state", broadcast_state, 1);

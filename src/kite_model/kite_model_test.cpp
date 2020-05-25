@@ -54,8 +54,9 @@ BOOST_AUTO_TEST_SUITE(kite_model_suite_test)
             id_wind_file >> windFrom_deg;
             id_wind_file >> windSpeed;
 
-            kite_props.Wind.WindFrom = windFrom_deg * M_PI/180.0;
-            kite_props.Wind.WindSpeed = windSpeed;
+            kite_props.atmosphere.WindFrom = windFrom_deg * M_PI/180.0;
+            kite_props.atmosphere.WindSpeed = windSpeed;
+            kite_props.atmosphere.airDensity= 1.1589; // Standard atmosphere at 468 meters
         } else {
             std::cout << "Could not open : id wind data file \n";
             id_wind_file.clear();
