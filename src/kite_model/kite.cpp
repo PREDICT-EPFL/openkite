@@ -387,10 +387,10 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     SX b_g = kmath::quat_transform(q_bg, SX::vertcat({0, 0, g}));
 
     /** Propeller thrust **/
-    const double p1 = -0.00083119;
-    const double p2 = -0.014700129;
+    const double p1 = -0.014700129;
+    const double p2 = -0.00083119;
     b_F_thrust =
-            T * (p1 * Va * Va + p2 * Va + 1.0) * SX::vertcat({1, 0, 0});  // T is the static thrust (at zero airspeed)
+            T * (p2 * Va * Va + p1 * Va + 1.0) * SX::vertcat({1, 0, 0});  // T is the static thrust (at zero airspeed)
 
     /** Tether force and moment **/
     if (teth_ON) {
