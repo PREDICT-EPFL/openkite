@@ -1013,25 +1013,25 @@ int main() {
     const std::string flightDataDir = "/home/johannes/identification/processed_flight_data/";
 
     /// State and Control dimensions ///
-    const int dimx = 13;  // v(3) w(3) r(3) q(4)
-    const int dimu = 4;   // T elev rud ail + windFrom windSpeed
-
+    const int dimX = 13;  // v(3) w(3) r(3) q(4)
+    const int dimU = 4;   // T elev rud ail
+    const int dimXa = dimX + dimU; // augmented states = states + controls
 
     /// 1. Data, number of data points and segments ///
-//    const std::string identManeuver = "identPitch";
-//    const int DATA_POINTS = 91;
-//    const int poly_order = 3;
-//    const int num_segments = 30;
+    const std::string identManeuver = "identPitch";
+    const int DATA_POINTS = 91;
+    const int poly_order = 3;
+    const int num_segments = 30;
 
 //    const std::string identManeuver = "identRoll";
 //    const int DATA_POINTS = 88;
 //    const int poly_order = 3;
 //    const int num_segments = 29;
 
-    const std::string identManeuver = "identYaw";
-    const int DATA_POINTS = 88;
-    const int poly_order = 3;
-    const int num_segments = 29;
+//    const std::string identManeuver = "identYaw";
+//    const int DATA_POINTS = 88;
+//    const int poly_order = 3;
+//    const int num_segments = 29;
 
 //    const std::string identManeuver = "mission_ID_PYR";
 //    const int DATA_POINTS = 325;
@@ -1045,16 +1045,16 @@ int main() {
 
     /// 2. Identification mode ///
     /* pitch / longitudinal */
-//    const kite_utils::IdentMode identMode = kite_utils::IdentMode::PITCH;
-//    const int dimp = 9;
+    const kite_utils::IdentMode identMode = kite_utils::IdentMode::PITCH;
+    const int dimP = 9;
 
     /* roll / lateral */
 //    const kite_utils::IdentMode identMode = kite_utils::IdentMode::ROLL;
 //    const int dimp = 11;
 
     /* yaw / lateral */
-    const kite_utils::IdentMode identMode = kite_utils::IdentMode::YAW;
-    const int dimp = 12;
+//    const kite_utils::IdentMode identMode = kite_utils::IdentMode::YAW;
+//    const int dimP = 12;
 
     /* yaw-roll */
 //    const kite_utils::IdentMode identMode = kite_utils::IdentMode::YR;
@@ -1067,7 +1067,7 @@ int main() {
     const int n_optimizationFailed_max = 3;
 
     /// ============================================================================================================ ///
-    std::cout << "\nRunning " << identManeuver << " identification of " << dimp << " parameters with "
+    std::cout << "\nRunning " << identManeuver << " identification of " << dimP << " parameters with "
               << DATA_POINTS << " data points.\n";
 
     /* Load identification schedule */
@@ -1082,15 +1082,17 @@ int main() {
     DM UBX = DM::vertcat({45, 10, 10,
                           1 * M_PI, 1 * M_PI, 1 * M_PI,
                           300, 300, 0,
-                          1.05, 1.05, 1.05, 1.05});
+                          1.05, 1.05, 1.05, 1.05,
+                          6.3739, 0.3665, 0.4625, 0.3578});
 
     DM LBX = DM::vertcat({2.0, -10, -10,
                           -1 * M_PI, -1 * M_PI, -1 * M_PI,
                           -300, -300, -300,
-                          -1.05, -1.05, -1.05, -1.05});     // for infinity use -DM::inf(1) and DM::inf(1)
+                          -1.05, -1.05, -1.05, -1.05,
+                          0, -0.3665, -0.4625, -0.3578});     // for infinity use -DM::inf(1) and DM::inf(1)
 
     /** Collocation **/
-    Chebyshev<SX, poly_order, num_segments, dimx, dimu, dimp> spectral;
+    Chebyshev<SX, poly_order, num_segments, dimXa, dimU, dimP> spectral;
 
     /* Vectors, length: states * collocation points */
     SX varx = spectral.VarX();
@@ -1138,7 +1140,7 @@ int main() {
         bool kite_params_warmStart{false};
 
 
-        readIn_sequenceData(seq_dir, flight, dimx, dimu, DATA_POINTS,
+        readIn_sequenceData(seq_dir, flight, dimX, dimU, DATA_POINTS,
 
                             id_time, id_states_woTime, id_controls_rev_woTime,
                             windFrom_deg, windSpeed, airDensity, tf,
@@ -1146,7 +1148,7 @@ int main() {
 
 
         /** Initial state: First column of id_states **/
-        DM id_state0 = id_states_woTime(Slice(0, dimx), 0);
+        DM id_state0 = DM::vertcat({id_states_woTime(Slice(0, dimX), 0), id_controls_rev_woTime(Slice(0, dimU), 0)});
 
         /** Control bounds **/
         /* (for all DATA_POINTs)
@@ -1155,13 +1157,13 @@ int main() {
         LBU = UBU = DM::vec(id_controls_rev_woTime);
 
         /** Fitting error **/
-        SX varx_ = SX::reshape(varx, dimx, DATA_POINTS);
+        SX varx_ = SX::reshape(varx, dimXa, DATA_POINTS);
         SX fitting_error = 0;
         for (uint jTimeStep = 0; jTimeStep < DATA_POINTS; ++jTimeStep) {
 
             /* Measured and to be optimized state at one DATA_POINT */
-            SX measured_state = id_states_woTime(Slice(0, dimx), jTimeStep);
-            SX state_to_optimize = varx_(Slice(0, dimx), DATA_POINTS - jTimeStep - 1); // time-reverse
+            SX measured_state = id_states_woTime(Slice(0, dimX), jTimeStep);
+            SX state_to_optimize = varx_(Slice(0, dimX), DATA_POINTS - jTimeStep - 1); // time-reverse
 
             if (useEulerAnglesForCostFunction) {
                 /* Convert quaternion to euler angles for cost calculation */
@@ -1197,7 +1199,7 @@ int main() {
         Function ode = kite_int.getNumericDynamics();
 
         SX diff_constr = spectral.CollocateDynamics(DynamicsFunc, 0, tf);
-        diff_constr = diff_constr(Slice(0, num_segments * poly_order * dimx));
+        diff_constr = diff_constr(Slice(0, num_segments * poly_order * dimXa));
 
         /** Set base parameters **/
         /* Parameter bounds */
@@ -1280,8 +1282,6 @@ int main() {
 
 
             /* Feasible optimization variable guess  */
-            DM feasible_state;
-
             DMDict feasible_guess;
 
             if (optResult_x.is_empty()) {
@@ -1305,8 +1305,9 @@ int main() {
                             {0.1, 1 / 3.0, 1 / 3.0,
                              1 / 2.0, 1 / 5.0, 1 / 2.0,
                              1 / 3.0, 1 / 3.0, 1 / 3.0,
-                             1.0, 1.0, 1.0, 1.0}));
-                    PSODESolver<poly_order, num_segments, dimx, dimu> ps_solver(ode, tf, props);
+                             1.0, 1.0, 1.0, 1.0,
+                             1 / 6.3739, 1 / 0.3665, 1 / 0.4625, 1 / 0.3578}));
+                    PSODESolver<poly_order, num_segments, dimXa, dimU> ps_solver(ode, tf, props);
 
                     DM init_control = DM({0.1, 0.0, 0.0, 0.0});
                     //init_control = casadi::DM::repmat(init_control, (num_segments * poly_order + 1), 1);
@@ -1323,8 +1324,9 @@ int main() {
 
                     /** Write estimated trajectory to file **/
                     /* Time-reverse trajectory from optimization result, reshape, reverse time */
-                    DM est_traj_rev_vect = optResult_x(Slice(0, varx.size1()));
-                    DM est_traj_rev_woTime = DM::reshape(est_traj_rev_vect, dimx, DATA_POINTS);
+                    DM est_traja_rev_vect = optResult_x(Slice(0, varx.size1()));
+                    DM est_traja_rev_woTime = DM::reshape(est_traja_rev_vect, dimXa, DATA_POINTS);
+                    DM est_traj_rev_woTime = est_traja_rev_woTime(Slice(0, dimX), Slice());
                     DM est_traj_woTime = flipDM(est_traj_rev_woTime, 2);
 
                     /* Now: Rows: States, Columns: Time steps
@@ -1344,8 +1346,8 @@ int main() {
             /* Set initial state
              * As the problem is formulated time-reverse, the position of the initial state
              * in the optimization variable vector is at the end of the states. */
-            int idx_in = num_segments * poly_order * dimx;
-            int idx_out = idx_in + dimx;
+            int idx_in = num_segments * poly_order * dimXa;
+            int idx_out = idx_in + dimXa;
             lbx(Slice(idx_in, idx_out), 0) = id_state0;
             ubx(Slice(idx_in, idx_out), 0) = id_state0;
 
@@ -1383,22 +1385,23 @@ int main() {
             }
 
             /* Time-reverse trajectory from optimization result, reshape, reverse time */
-            DM est_traj_rev_vect = optResult_x(Slice(0, varx.size1()));
-            DM est_traj_rev_woTime = DM::reshape(est_traj_rev_vect, dimx, DATA_POINTS);
-            DM est_traj_woTime = flipDM(est_traj_rev_woTime, 2);
+            DM est_traja_rev_vect = optResult_x(Slice(0, varx.size1()));
+            DM est_traja_rev_woTime = DM::reshape(est_traja_rev_vect, dimXa, DATA_POINTS);
+            DM est_traja_woTime = flipDM(est_traja_rev_woTime, 2);
 
-            /* Now: Rows: States, Columns: Time steps
-             * Add original times as first row */
-            DM est_traj_wTime = DM::vertcat({id_time, est_traj_woTime});
+
 
             /* Calculate fitting error (cost function) using time-reverse trajectory */
-            double fitting_error_evaluated = static_cast<double>(fitting_error_func(DMVector{est_traj_rev_woTime})[0]);
+            double fitting_error_evaluated = static_cast<double>(fitting_error_func(DMVector{est_traja_rev_woTime})[0]);
 
             std::cout << "\n\nIteration " << iIt + 1 << " result:\n";
 
+            /* Now: Rows: States, Columns: Time steps
+             * Add original times as first row */
+            DM est_traj_wTime = DM::vertcat({id_time, est_traja_rev_woTime});
             /** Write estimated trajectory to file **/
             std::string est_traj_filepath = kite_params_out_dir + afterItStr + "_estimatedTrajectory.txt";
-            write_trajectoryFile(est_traj_wTime, est_traj_filepath);
+            write_trajectoryFile(est_traj_wTime(Slice(0, 1 + dimX), Slice()), est_traj_filepath);
 
             /** Write new parameters to YAML file **/
             write_parameterFile(kite_params_in_filepath, paramList, kite_params_out_filepath);

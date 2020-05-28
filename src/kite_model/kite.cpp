@@ -283,8 +283,13 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
                             RUD &Cndr,
 
                             SX &v, SX &w, SX &r, SX &q,
-                            SX &T, SX &dE, SX &dR, SX &dA,
+                            SX &F_thr0, SX &dE, SX &dR, SX &dA,
+
+                            SX &F_thr0_cmd, SX &dE_cmd, SX &dR_cmd, SX &dA_cmd,
+
                             SX &v_dot, SX &w_dot, SX &r_dot, SX &q_dot,
+                            SX &F_thr0_dot, SX &dE_dot, SX &dR_dot, SX &dA_dot,
+
                             SX &Va_pitot, SX &Va, SX &alpha, SX &beta,
                             SX &b_F_aero, SX &b_F_thrust, bool teth_ON, SX &b_F_tether) {
     /** Start of model ============================================================================================= **/
@@ -298,14 +303,20 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     w = SX::sym("w", 3); // Angular velocity (body frame) [rad/s]
     r = SX::sym("r", 3); // Position of the CoG (geodetic (NED) frame) [m]
     q = SX::sym("q", 4); // Rotation from geodetic (NED) to body frame. Transforms a body vector to ned. = q_gb
-
     SX q_bg = kmath::quat_inverse(q);
 
-    /** Control variables **/
-    T = SX::sym("T");   // Static propeller thrust along body frame x axis [N]
-    dE = SX::sym("dE"); // Elevator deflection [positive causing negative pitch movement (nose down)] [rad]
-    dR = SX::sym("dR"); // Rudder deflection [positive causing negative yaw movement (nose left)] [rad]
-    dA = SX::sym("dA"); // Aileron deflection [positive causing negative roll movement (right wing up)] [rad]
+    /** Control commands **/
+    F_thr0_cmd = SX::sym("F_thr0_cmd");
+    dE_cmd = SX::sym("dE_cmd");
+    dR_cmd = SX::sym("dR_cmd");
+    dA_cmd = SX::sym("dA_cmd");
+
+    /** Control positions (states) **/
+    F_thr0 = SX::sym("F_thr0");   // Static propeller thrust along body frame x axis [N]
+    dE = SX::sym("dE_cmd"); // Elevator deflection [positive causing negative pitch movement (nose down)] [rad]
+    dR = SX::sym("dR_cmd"); // Rudder deflection [positive causing negative yaw movement (nose left)] [rad]
+    dA = SX::sym("dA_cmd"); // Aileron deflection [positive causing negative roll movement (right wing up)] [rad]
+
 
     /** Aerodynamic (Wind) frame **/
     /* Wind velocity in body frame */
@@ -390,7 +401,8 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     const double p1 = -0.014700129;
     const double p2 = -0.00083119;
     b_F_thrust =
-            T * (p2 * Va * Va + p1 * Va + 1.0) * SX::vertcat({1, 0, 0});  // T is the static thrust (at zero airspeed)
+            F_thr0 * (p2 * Va * Va + p1 * Va + 1.0) *
+            SX::vertcat({1, 0, 0});  // F_thr0 is the static thrust (at zero airspeed)
 
     /** Tether force and moment **/
     if (teth_ON) {
@@ -460,6 +472,19 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
             + 0.5 * lambda * q * (SX::dot(q, q) - 1);               // Quaternion norm stabilization term,
     // as in Gros: 'Baumgarte Stabilisation over the SO(3) Rotation Group for Control',
     // improved: lambda negative and SX::dot(q, q) instead of lambda positive and 1/SX::dot(q, q).
+
+    /** ------------------------------------ **/
+    /** Actuator dynamics **/
+    /** ------------------------------------ **/
+    const double TC_thr = 1.0 / 6.3739;               // Full thrust builds up in 1 second
+    const double TC_dE = 0.11 / (60.0 * M_PI / 180.0);
+    const double TC_dR = 0.11 / (60.0 * M_PI / 180.0);
+    const double TC_dA = 0.12 / (40.0 * M_PI / 180.0);
+
+    F_thr0_dot = 1.0 / TC_thr * (F_thr0_cmd - F_thr0);
+    dE_dot = 1.0 / TC_dE * (dE_cmd - dE);
+    dR_dot = 1.0 / TC_dR * (dR_cmd - dR);
+    dA_dot = 1.0 / TC_dA * (dA_cmd - dA);
 
     /** End of dynamics model ====================================================================================== **/
 }
@@ -553,13 +578,11 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     //    double rz = KiteProps.Tether.rz;
 
 
-    SX v, w, r, q;
-    SX T, dE, dR, dA;
-    SX v_dot, w_dot, r_dot, q_dot;
+    SX v, w, r, q, F_thr0, dE, dR, dA;
+    SX F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd;
+    SX v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot;
     SX Va_pitot, Va, alpha, beta;
     SX b_F_aero, b_F_thrust, b_F_tether;
-
-    SX control;
 
     double windFrom = kiteProps.atmosphere.WindFrom;
     double windSpeed = kiteProps.atmosphere.WindSpeed;
@@ -589,36 +612,36 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             Clda, Cnda,
             CYdr, Cldr, Cndr,
 
-            v, w, r, q,
-            T, dE, dR, dA,
-            v_dot, w_dot, r_dot, q_dot,
+            v, w, r, q, F_thr0, dE, dR, dA,
+            F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
+            v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
+
             Va_pitot, Va, alpha, beta,
             b_F_aero, b_F_thrust, teth_ON, b_F_tether);
 
-    control = SX::vertcat({T, dE, dR, dA});
-
+    SX control_cmd = SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
 
     /** Complete dynamics of the Kite */
-    auto state = SX::vertcat({v, w, r, q});
-    auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
+    auto state = SX::vertcat({v, w, r, q, F_thr0, dE, dR, dA});
+    auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot});
 
     SX aero_values = SX::vertcat({Va, alpha, beta});
 
-    Function dyn_func = Function("dynamics", {state, control}, {dynamics});
+    Function dyn_func = Function("dynamics", {state, control_cmd}, {dynamics});
     Function airspeedMeas_func = Function("airspeed", {state}, {Va_pitot});
     Function aeroValues_func = Function("aero_out", {state}, {aero_values});
-    Function specNongravForce_func = Function("spec_nongrav_force", {state, control},
+    Function specNongravForce_func = Function("spec_nongrav_force", {state, control_cmd},
                                               {(b_F_aero + b_F_thrust + b_F_tether) / Mass});
-    Function specTethForce_func = Function("specTethForce", {state, control}, {b_F_tether / Mass});
+    Function specTethForce_func = Function("specTethForce", {state, control_cmd}, {b_F_tether / Mass});
 
     /** compute dynamics state Jacobian */
     SX d_jacobian = SX::jacobian(dynamics, state);
-    Function dyn_jac = Function("dyn_jacobian", {state, control}, {d_jacobian});
+    Function dyn_jac = Function("dyn_jacobian", {state, control_cmd}, {d_jacobian});
 
-    AeroDynamics = Function("Aero", {state, control}, {b_F_aero});
+    AeroDynamics = Function("Aero", {state, control_cmd}, {b_F_aero});
     /** define RK4 integrator scheme */
     SX X = SX::sym("X", state.size1());
-    SX U = SX::sym("U", control.size1());
+    SX U = SX::sym("U", control_cmd.size1());
     SX dT = SX::sym("dT");
 
     /** get symbolic expression for RK4 integrator */
@@ -629,14 +652,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     /** @todo: make smarter initialisation of integrator */
     double h = AlgoProps.sampling_time;
     SXDict ode = {{"x",   state},
-                  {"p",   control},
+                  {"p",   control_cmd},
                   {"ode", dynamics}};
     Dict opts = {{"tf", h}};
     Function CVODES_INT = integrator("CVODES_INT", "cvodes", ode, opts);
 
     /** assign class atributes */
     this->State = state;
-    this->Control = control;
+    this->Control = control_cmd;
     this->SymDynamics = dynamics;
     this->SymIntegartor = sym_integrator;
     this->SymJacobian = d_jacobian;
@@ -682,14 +705,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     double Izz = kiteProps.Inertia.Izz;
     double Ixz = kiteProps.Inertia.Ixz;
 
-    SX v, w, r, q;
-    SX T, dE, dR, dA;
-    SX v_dot, w_dot, r_dot, q_dot;
+    SX v, w, r, q, F_thr0, dE, dR, dA;
+    SX F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd;
+    SX v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot;
     SX Va_pitot, Va, alpha, beta;
     SX b_F_aero, b_F_thrust, b_F_tether;
 
     SX params;
-    SX control;
+    SX control_cmd;
 
     if (identMode == kite_utils::IdentMode::PITCH) {
         /** LONGITUDINAL IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
@@ -789,13 +812,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
 
-                v, w, r, q,
-                T, dE, dR, dA,
-                v_dot, w_dot, r_dot, q_dot,
+                v, w, r, q, F_thr0, dE, dR, dA,
+                F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
+                v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
+
                 Va_pitot, Va, alpha, beta,
                 b_F_aero, b_F_thrust, false, b_F_tether);
 
-        control = SX::vertcat({T, dE, dR, dA});
+        control_cmd =SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
 
 
     } else if (identMode == kite_utils::IdentMode::ROLL) {
@@ -899,13 +923,13 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
 
-                v, w, r, q,
-                T, dE, dR, dA,
-                v_dot, w_dot, r_dot, q_dot,
+                v, w, r, q, F_thr0, dE, dR, dA,
+                F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
+                v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
                 Va_pitot, Va, alpha, beta,
                 b_F_aero, b_F_thrust, false, b_F_tether);
 
-        control = SX::vertcat({T, dE, dR, dA});
+        control_cmd = SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
 
     } else if (identMode == kite_utils::IdentMode::YAW) {
         /** LATERAL IDENTIFICATION PARAMETERS ----------------------------------------------------------------------- */
@@ -1009,13 +1033,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
 
-                v, w, r, q,
-                T, dE, dR, dA,
-                v_dot, w_dot, r_dot, q_dot,
+                v, w, r, q, F_thr0, dE, dR, dA,
+                F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
+                v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
+
                 Va_pitot, Va, alpha, beta,
                 b_F_aero, b_F_thrust, false, b_F_tether);
 
-        control = SX::vertcat({T, dE, dR, dA});
+        control_cmd = SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
 
     } else if (identMode == kite_utils::IdentMode::COMPLETE) {
         /** COMPLETE IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
@@ -1140,13 +1165,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
 
-                v, w, r, q,
-                T, dE, dR, dA,
-                v_dot, w_dot, r_dot, q_dot,
+                v, w, r, q, F_thr0, dE, dR, dA,
+                F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
+                v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
+
                 Va_pitot, Va, alpha, beta,
                 b_F_aero, b_F_thrust, false, b_F_tether);
 
-        control = SX::vertcat({T, dE, dR, dA});
+        control_cmd = SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
 
     } else if (identMode == kite_utils::IdentMode::YR or identMode == kite_utils::IdentMode::YRb) {
         /** Yaw Roll IDENTIFICATION PARAMETERS ------------------------------------------------------------------ */
@@ -1254,13 +1280,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
 
-                v, w, r, q,
-                T, dE, dR, dA,
-                v_dot, w_dot, r_dot, q_dot,
+                v, w, r, q, F_thr0, dE, dR, dA,
+                F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
+                v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
+
                 Va_pitot, Va, alpha, beta,
                 b_F_aero, b_F_thrust, false, b_F_tether);
 
-        control = SX::vertcat({T, dE, dR, dA});
+        control_cmd = SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
     }
 
 
@@ -1279,19 +1306,19 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 //                         }); // 5 Tether parameters
 
     /** Complete dynamics of the Kite */
-    auto state = SX::vertcat({v, w, r, q});
-    auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot});
+    auto state = SX::vertcat({v, w, r, q, F_thr0, dE, dR, dA});
+    auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot});
 
-    Function dyn_func = Function("dynamics", {state, control, params}, {dynamics});
-    Function specNongravForce_func = Function("spec_nongrav_force", {state, control}, {(b_F_aero + b_F_thrust) / Mass});
+    Function dyn_func = Function("dynamics", {state, control_cmd, params}, {dynamics});
+    Function specNongravForce_func = Function("spec_nongrav_force", {state, control_cmd}, {(b_F_aero + b_F_thrust) / Mass});
 
     /** compute dynamics state Jacobian */
     SX d_jacobian = SX::jacobian(dynamics, state);
-    Function dyn_jac = Function("dyn_jacobian", {state, control, params}, {d_jacobian});
+    Function dyn_jac = Function("dyn_jacobian", {state, control_cmd, params}, {d_jacobian});
 
     /** define RK4 integrator scheme */
     SX X = SX::sym("X", state.size1());
-    SX U = SX::sym("U", control.size1());
+    SX U = SX::sym("U", control_cmd.size1());
     SX dT = SX::sym("dT");
 
     /** get symbolic expression for RK4 integrator */
@@ -1308,7 +1335,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
     /** assign class atributes */
     this->State = state;
-    this->Control = control;
+    this->Control = control_cmd;
     this->Parameters = params;
     this->SymDynamics = dynamics;
     //this->SymIntegartor = sym_integrator;

@@ -34,6 +34,10 @@ Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh) {
 
     std::vector<double> initial_value;
     m_nh->getParam("init_state", initial_value);
+    initial_value.emplace_back(0);
+    initial_value.emplace_back(0);
+    initial_value.emplace_back(0);
+    initial_value.emplace_back(0);
     initialize(DM(initial_value));
     ROS_INFO_STREAM("Simulator initialized at: " << initial_value);
 

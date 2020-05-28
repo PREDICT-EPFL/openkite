@@ -218,8 +218,10 @@ public:
                   RUD &Cndr,
 
                   casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
-                  casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
+                  casadi::SX &F_thr0, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
+                  casadi::SX &F_thr0_cmd, casadi::SX &dE_cmd, casadi::SX &dR_cmd, casadi::SX &dA_cmd,
                   casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
+                  casadi::SX &F_thr0_dot, casadi::SX &dE_dot, casadi::SX &dR_dot, casadi::SX &dA_dot,
                   casadi::SX &Va_pitot, casadi::SX &Va, casadi::SX &alpha, casadi::SX &beta,
                   casadi::SX &b_F_aero, casadi::SX &b_F_thrust, bool teth_ON, casadi::SX &b_F_tether);
 
