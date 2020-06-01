@@ -357,51 +357,51 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     /** ---------------------------------------------------------- **/
     /** Aerodynamic Forces and Moments in aerodynamic (wind) frame **/
     /** ---------------------------------------------------------- **/
+//    SX q_ba = kmath::quat_multiply(kmath::T2quat(alpha), kmath::T2quat(-beta));
+//    SX w_ = w;
+
     /* XFLR5 gives coefficients in stability frame */
     // To get from stability axis to body, rotate by aoa
-    SX q_ba = kmath::quat_multiply(kmath::T2quat(alpha), kmath::T2quat(-beta));
+    SX q_bs = kmath::T2quat(alpha);
 
-//    /* XFLR5 gives coefficients in stability frame */
-//    // To get from stability axis to body, rotate by aoa
-//    SX q_bs = kmath::T2quat(alpha);
-//    SX q_sb = kmath::quat_inverse(q_bs);
-//
 //    /* Body rates in stability frame (pitch rate is equal in both frames) */
-//    SX w_ = kmath::quat_transform(q_sb, w);
+    SX q_sb = kmath::quat_inverse(q_bs);
+    SX w_ = kmath::quat_transform(q_sb, w);
 
     SX dyn_press = 0.5 * rho * Va * Va;
-    SX CL = CL0 + CLa * alpha + CLq * c / (2.0 * Va) * w(1) + CLde * dE;
+    SX CL = CL0 + CLa * alpha + CLq * c / (2.0 * Va) * w_(1) + CLde * dE;
     SX CD = (CD0 + CL * CL / (pi * e_oswald * AR));
 
     /** Forces in x, y, z directions: -Drag, Side force, -Lift **/
     SX LIFT = dyn_press * S * CL;
     SX DRAG = dyn_press * S * CD;
     SX SF = dyn_press * S * (CYb * beta +
-                             b / (2.0 * Va) * (CYp * w(0) + CYr * w(2)) +
+                             b / (2.0 * Va) * (CYp * w_(0) + CYr * w_(2)) +
                              CYdr * dR);
 
-    SX a_Faero = SX::vertcat({-DRAG, SF, -LIFT});
+    SX s_Faero = SX::vertcat({-DRAG, SF, -LIFT});
 
     /** Moments about x, y, z axes: L, M, N **/
     SX L = dyn_press * S * b * (Cl0 + Clb * beta +
-                                b / (2.0 * Va) * (Clp * w(0) + Clr * w(2)) +
+                                b / (2.0 * Va) * (Clp * w_(0) + Clr * w_(2)) +
                                 Clda * dA + Cldr * dR);
 
     SX M = dyn_press * S * c * (Cm0 + Cma * alpha +
-                                c / (2.0 * Va) * Cmq * w(1) +
+                                c / (2.0 * Va) * Cmq * w_(1) +
                                 Cmde * dE);
 
     SX N = dyn_press * S * b * (Cn0 + Cnb * beta +
-                                b / (2.0 * Va) * (Cnp * w(0) + Cnr * w(2)) +
+                                b / (2.0 * Va) * (Cnp * w_(0) + Cnr * w_(2)) +
                                 Cnda * dA + Cndr * dR);
 
-    SX b_Maero = SX::vertcat({L, M, N});
+    SX s_Maero = SX::vertcat({L, M, N});
 
     /** Aerodynamic Forces and Moments in body frame **/
-//    b_F_aero = kmath::quat_transform(q_bs, s_Faero);
-//    auto b_Maero = kmath::quat_transform(q_bs, s_Maero);
-    b_F_aero = kmath::quat_transform(q_ba, a_Faero);
+//    b_F_aero = kmath::quat_transform(q_bs, a_Faero);
 //    auto b_Maero = kmath::quat_transform(q_ba, a_Maero);
+
+    b_F_aero = kmath::quat_transform(q_bs, s_Faero);
+    auto b_Maero = kmath::quat_transform(q_bs, s_Maero);
 
     /** ---------------------------------------- **/
     /** Gravitation, Thrust, Tether (body frame) **/
@@ -412,7 +412,7 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     /** Propeller thrust **/
     const double p1 = -0.014700129;
     const double p2 = -0.00083119;
-    b_F_thrust = 0;//F_thr0 * (p2 * Va * Va + p1 * Va + 1.0) * SX::vertcat({1, 0, 0});
+    b_F_thrust = F_thr0 * (p2 * Va * Va + p1 * Va + 1.0) * SX::vertcat({1, 0, 0});
     // F_thr0 is the static thrust (at zero airspeed)
 
     /** Tether force and moment **/
@@ -488,24 +488,14 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     /** Actuator dynamics **/
     /** ------------------------------------ **/
     const double TC_thr = 1.0 / 6.3739;               // Full thrust builds up in 1 second
-    const double TC_dE_ = 0.11 / (60.0 * M_PI / 180.0);
-    const double TC_dR_ = 0.11 / (60.0 * M_PI / 180.0);
-    const double TC_dA_ = 0.12 / (40.0 * M_PI / 180.0);
+    // const double TC_dE_ = 0.11 / (60.0 * M_PI / 180.0);
+    // const double TC_dR_ = 0.11 / (60.0 * M_PI / 180.0);
+    // const double TC_dA_ = 0.12 / (40.0 * M_PI / 180.0);
 
-//    F_thr0_dot = 1.0 / TC_thr * (F_thr0_cmd - F_thr0);
-//    dE_dot = 1.0 / TC_dE * (dE_cmd - dE);
-//    dR_dot = 1.0 / TC_dR * (dR_cmd - dR);
-//    dA_dot = 1.0 / TC_dA * (dA_cmd - dA);
-
-    F_thr0_dot = (F_thr0_cmd - F_thr0);
-    dE_dot =  (dE_cmd - dE)/0.005;
-    dR_dot =  (dR_cmd - dR)/0.005;
-    dA_dot =  (dA_cmd - dA)/0.005;
-
-//    F_thr0_dot = (F_thr0_cmd - F_thr0);
-//    dE_dot = 0;
-//    dR_dot = 0;
-//    dA_dot = 0;
+    F_thr0_dot = (F_thr0_cmd - F_thr0) / TC_thr;
+    dE_dot = (dE_cmd - dE) / TC_dE;
+    dR_dot = (dR_cmd - dR) / TC_dR;
+    dA_dot = (dA_cmd - dA) / TC_dA;
 
     /** End of dynamics model ====================================================================================== **/
 }
