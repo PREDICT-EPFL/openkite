@@ -91,6 +91,14 @@ KiteProperties LoadProperties(const std::string &filename) {
     props.Aerodynamics.Cldr = config["aero_ctrl_rud"]["Cldr"].as<double>();
     props.Aerodynamics.Cndr = config["aero_ctrl_rud"]["Cndr"].as<double>();
 
+
+    /** ------------------------------ **/
+    /** Actuator dynamics              **/
+    /** ------------------------------ **/
+    props.Actuators.TC_dER = config["actuators"]["TC_dER"].as<double>();
+    props.Actuators.TC_dA = config["actuators"]["TC_dA"].as<double>();
+
+
     //props.Tether.length = config["tether"]["length"].as<double>();
     //props.Tether.Ks = config["tether"]["Ks"].as<double>();
     //props.Tether.Kd = config["tether"]["Kd"].as<double>();
@@ -240,7 +248,7 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
                             GEN &b, GEN &c, GEN &AR, GEN &S,
                             GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
-                            GEN &e_oswald,
+                            DLO &e_oswald,
                             DLO &CD0,
 
 
@@ -282,6 +290,11 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
                             RUD &Cldr,
                             RUD &Cndr,
 
+
+                            ELV &TC_dE,
+                            RUD &TC_dR,
+                            AIL &TC_dA,
+
                             SX &v, SX &w, SX &r, SX &q,
                             SX &F_thr0, SX &dE, SX &dR, SX &dA,
 
@@ -313,10 +326,9 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
 
     /** Control positions (states) **/
     F_thr0 = SX::sym("F_thr0");   // Static propeller thrust along body frame x axis [N]
-    dE = SX::sym("dE_cmd"); // Elevator deflection [positive causing negative pitch movement (nose down)] [rad]
-    dR = SX::sym("dR_cmd"); // Rudder deflection [positive causing negative yaw movement (nose left)] [rad]
-    dA = SX::sym("dA_cmd"); // Aileron deflection [positive causing negative roll movement (right wing up)] [rad]
-
+    dE = SX::sym("dE"); // Elevator deflection [positive causing negative pitch movement (nose down)] [rad]
+    dR = SX::sym("dR"); // Rudder deflection [positive causing negative yaw movement (nose left)] [rad]
+    dA = SX::sym("dA"); // Aileron deflection [positive causing negative roll movement (right wing up)] [rad]
 
     /** Aerodynamic (Wind) frame **/
     /* Wind velocity in body frame */
@@ -383,13 +395,13 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
                                 b / (2.0 * Va) * (Cnp * w(0) + Cnr * w(2)) +
                                 Cnda * dA + Cndr * dR);
 
-    SX a_Maero = SX::vertcat({L, M, N});
+    SX b_Maero = SX::vertcat({L, M, N});
 
     /** Aerodynamic Forces and Moments in body frame **/
 //    b_F_aero = kmath::quat_transform(q_bs, s_Faero);
 //    auto b_Maero = kmath::quat_transform(q_bs, s_Maero);
     b_F_aero = kmath::quat_transform(q_ba, a_Faero);
-    auto b_Maero = kmath::quat_transform(q_ba, a_Maero);
+//    auto b_Maero = kmath::quat_transform(q_ba, a_Maero);
 
     /** ---------------------------------------- **/
     /** Gravitation, Thrust, Tether (body frame) **/
@@ -400,9 +412,8 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     /** Propeller thrust **/
     const double p1 = -0.014700129;
     const double p2 = -0.00083119;
-    b_F_thrust =
-            F_thr0 * (p2 * Va * Va + p1 * Va + 1.0) *
-            SX::vertcat({1, 0, 0});  // F_thr0 is the static thrust (at zero airspeed)
+    b_F_thrust = 0;//F_thr0 * (p2 * Va * Va + p1 * Va + 1.0) * SX::vertcat({1, 0, 0});
+    // F_thr0 is the static thrust (at zero airspeed)
 
     /** Tether force and moment **/
     if (teth_ON) {
@@ -477,14 +488,24 @@ void KiteDynamics::getModel(GEN &g, GEN &rho,
     /** Actuator dynamics **/
     /** ------------------------------------ **/
     const double TC_thr = 1.0 / 6.3739;               // Full thrust builds up in 1 second
-    const double TC_dE = 0.11 / (60.0 * M_PI / 180.0);
-    const double TC_dR = 0.11 / (60.0 * M_PI / 180.0);
-    const double TC_dA = 0.12 / (40.0 * M_PI / 180.0);
+    const double TC_dE_ = 0.11 / (60.0 * M_PI / 180.0);
+    const double TC_dR_ = 0.11 / (60.0 * M_PI / 180.0);
+    const double TC_dA_ = 0.12 / (40.0 * M_PI / 180.0);
 
-    F_thr0_dot = 1.0 / TC_thr * (F_thr0_cmd - F_thr0);
-    dE_dot = 1.0 / TC_dE * (dE_cmd - dE);
-    dR_dot = 1.0 / TC_dR * (dR_cmd - dR);
-    dA_dot = 1.0 / TC_dA * (dA_cmd - dA);
+//    F_thr0_dot = 1.0 / TC_thr * (F_thr0_cmd - F_thr0);
+//    dE_dot = 1.0 / TC_dE * (dE_cmd - dE);
+//    dR_dot = 1.0 / TC_dR * (dR_cmd - dR);
+//    dA_dot = 1.0 / TC_dA * (dA_cmd - dA);
+
+    F_thr0_dot = (F_thr0_cmd - F_thr0);
+    dE_dot =  (dE_cmd - dE)/0.005;
+    dR_dot =  (dR_cmd - dR)/0.005;
+    dA_dot =  (dA_cmd - dA)/0.005;
+
+//    F_thr0_dot = (F_thr0_cmd - F_thr0);
+//    dE_dot = 0;
+//    dR_dot = 0;
+//    dA_dot = 0;
 
     /** End of dynamics model ====================================================================================== **/
 }
@@ -568,6 +589,13 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     double Cndr = kiteProps.Aerodynamics.Cndr;
 
     /** ------------------------------ **/
+    /** Actuator dynamics              **/
+    /** ------------------------------ **/
+    double TC_dE = kiteProps.Actuators.TC_dER;
+    double TC_dR = kiteProps.Actuators.TC_dER;
+    double TC_dA = kiteProps.Actuators.TC_dA;
+
+    /** ------------------------------ **/
     /**        Tether parameters       **/
     /** ------------------------------ **/
     //    double Lt = KiteProps.Tether.length;
@@ -611,6 +639,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
             CLde, Cmde,
             Clda, Cnda,
             CYdr, Cldr, Cndr,
+
+            TC_dE, TC_dR, TC_dA,
 
             v, w, r, q, F_thr0, dE, dR, dA,
             F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
@@ -720,7 +750,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         /** ------------------------------- **/
         /** Aerodynamic parameters          **/
         /** ------------------------------- **/
-        double e_oswald = kiteProps.Aerodynamics.e_oswald;
+        //double e_oswald = kiteProps.Aerodynamics.e_oswald;
+        SX e_oswald = SX::sym("e_oswald");
         SX CD0 = SX::sym("CD0");
 
         /* AOA */
@@ -771,7 +802,16 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         double Cldr = kiteProps.Aerodynamics.Cldr;
         double Cndr = kiteProps.Aerodynamics.Cndr;
 
+
+        /** ------------------------------ **/
+        /** Actuator dynamics              **/
+        /** ------------------------------ **/
+        SX TC_dE = SX::sym("TC_dE");
+        double TC_dR = kiteProps.Actuators.TC_dER;
+        double TC_dA = kiteProps.Actuators.TC_dA;
+
         params = SX::vertcat({params,
+                              e_oswald,
                               CD0,
 
                               CL0,
@@ -784,8 +824,10 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                               Cmq,
 
                               CLde,
-                              Cmde
-                             }); // 9 longitudinal parameters
+                              Cmde,
+
+                              TC_dE
+                             }); // 11 longitudinal parameters
 
         /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
          *        W, GEN,   DLO, DLA,   AIL,    ELV, RUD*/
@@ -812,6 +854,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
 
+                TC_dE, TC_dR, TC_dA,
+
                 v, w, r, q, F_thr0, dE, dR, dA,
                 F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
                 v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
@@ -819,7 +863,7 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Va_pitot, Va, alpha, beta,
                 b_F_aero, b_F_thrust, false, b_F_tether);
 
-        control_cmd =SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
+        control_cmd = SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
 
 
     } else if (identMode == kite_utils::IdentMode::ROLL) {
@@ -879,6 +923,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         double Cldr = kiteProps.Aerodynamics.Cldr;
         double Cndr = kiteProps.Aerodynamics.Cndr;
 
+
+        /** ------------------------------ **/
+        /** Actuator dynamics              **/
+        /** ------------------------------ **/
+        double TC_dE = kiteProps.Actuators.TC_dER;
+        double TC_dR = kiteProps.Actuators.TC_dER;
+        SX TC_dA = SX::sym("TC_dA");
+
         params = SX::vertcat({params,
                               CYb,
 
@@ -895,8 +947,10 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                               Cnr,
 
                               Clda,
-                              Cnda
-                             }); // 12 lateral parameters (Aileron control only)
+                              Cnda,
+
+                              TC_dA
+                             }); // 13 lateral parameters (Aileron control only)
 
         /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
          *        W,     GEN,    DLO,   DLA, AIL, ELV,   RUD*/
@@ -922,6 +976,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 CLde, Cmde,
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
+
+                TC_dE, TC_dR, TC_dA,
 
                 v, w, r, q, F_thr0, dE, dR, dA,
                 F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
@@ -988,6 +1044,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         SX Cldr = SX::sym("Cldr");
         SX Cndr = SX::sym("Cndr");
 
+
+        /** ------------------------------ **/
+        /** Actuator dynamics              **/
+        /** ------------------------------ **/
+        double TC_dE = kiteProps.Actuators.TC_dER;
+        SX TC_dR = SX::sym("TC_dR");
+        double TC_dA = kiteProps.Actuators.TC_dA;
+
         params = SX::vertcat({params,
                               CYb,
 
@@ -1005,8 +1069,10 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
                               CYdr,
                               Cldr,
-                              Cndr
-                             }); // 12 lateral parameters (Rudder control only)
+                              Cndr,
+
+                              TC_dR
+                             }); // 14 lateral parameters (Rudder control only)
 
         /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
          *        W,     GEN,    DLO,   DLA, AIL,    ELV,   RUD*/
@@ -1033,6 +1099,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
 
+                TC_dE, TC_dR, TC_dA,
+
                 v, w, r, q, F_thr0, dE, dR, dA,
                 F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
                 v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
@@ -1048,7 +1116,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         /** ------------------------------- **/
         /** Aerodynamic parameters          **/
         /** ------------------------------- **/
-        double e_oswald = kiteProps.Aerodynamics.e_oswald;
+//        double e_oswald = kiteProps.Aerodynamics.e_oswald;
+        SX e_oswald = SX::sym("e_oswald");
         SX CD0 = SX::sym("CD0");
 
         /* AOA */
@@ -1099,7 +1168,15 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         SX Cldr = SX::sym("Cldr");
         SX Cndr = SX::sym("Cndr");
 
+        /** ------------------------------ **/
+        /** Actuator dynamics              **/
+        /** ------------------------------ **/
+        SX TC_dE = SX::sym("TC_dE");
+        SX TC_dR = SX::sym("TC_dR");
+        SX TC_dA = SX::sym("TC_dA");
+
         params = SX::vertcat({params,
+                              e_oswald,
                               CD0,
 
                               CL0,
@@ -1137,8 +1214,12 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
                               CYdr,
                               Cldr,
-                              Cndr
-                             }); // 25 parameters
+                              Cndr,
+
+                              TC_dE,
+                              TC_dR,
+                              TC_dA
+                             }); // 27 parameters
 
         /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
          *        W,     GEN,   DLO,     DLA,   AIL,    ELV,    RUD*/
@@ -1164,6 +1245,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 CLde, Cmde,
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
+
+                TC_dE, TC_dR, TC_dA,
 
                 v, w, r, q, F_thr0, dE, dR, dA,
                 F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
@@ -1230,6 +1313,14 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
         SX Cldr = SX::sym("Cldr");
         SX Cndr = SX::sym("Cndr");
 
+
+        /** ------------------------------ **/
+        /** Actuator dynamics              **/
+        /** ------------------------------ **/
+        double TC_dE = kiteProps.Actuators.TC_dER;
+        SX TC_dR = SX::sym("TC_dR");
+        SX TC_dA = SX::sym("TC_dA");
+
         params = SX::vertcat({params,
                               CYb,
 
@@ -1252,8 +1343,12 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
                               CYdr,
                               Cldr,
-                              Cndr
-                             }); // 14 parameters
+                              Cndr,
+
+                              TC_dE,
+                              TC_dR,
+                              TC_dA
+                             }); // 16 parameters
 
         /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder
          *        W,     GEN,   DLO,    DLA, AIL,  ELV,  RUD*/
@@ -1280,6 +1375,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
                 Clda, Cnda,
                 CYdr, Cldr, Cndr,
 
+                TC_dE, TC_dR, TC_dA,
+
                 v, w, r, q, F_thr0, dE, dR, dA,
                 F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd,
                 v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot,
@@ -1289,7 +1386,6 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
 
         control_cmd = SX::vertcat({F_thr0_cmd, dE_cmd, dR_cmd, dA_cmd});
     }
-
 
 //    /** ------------------------------ **/
 //    /**        Tether parameters       **/
@@ -1310,7 +1406,8 @@ KiteDynamics::KiteDynamics(const KiteProperties &kiteProps, const AlgorithmPrope
     auto dynamics = SX::vertcat({v_dot, w_dot, r_dot, q_dot, F_thr0_dot, dE_dot, dR_dot, dA_dot});
 
     Function dyn_func = Function("dynamics", {state, control_cmd, params}, {dynamics});
-    Function specNongravForce_func = Function("spec_nongrav_force", {state, control_cmd}, {(b_F_aero + b_F_thrust) / Mass});
+    Function specNongravForce_func = Function("spec_nongrav_force", {state, control_cmd},
+                                              {(b_F_aero + b_F_thrust) / Mass});
 
     /** compute dynamics state Jacobian */
     SX d_jacobian = SX::jacobian(dynamics, state);

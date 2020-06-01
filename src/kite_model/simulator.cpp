@@ -11,10 +11,10 @@ using namespace casadi;
 //}
 
 void Simulator::controlCallback(const sensor_msgs::JoyConstPtr &msg) {
-    controls(0) = msg->axes[0]; // Thrust
-    controls(1) = msg->axes[1]; // Elevator
-    controls(2) = msg->axes[2]; // Rudder
-    controls(3) = msg->axes[3]; // Aileron
+    control_cmds(0) = msg->axes[0]; // Thrust
+    control_cmds(1) = msg->axes[1]; // Elevator
+    control_cmds(2) = msg->axes[2]; // Rudder
+    control_cmds(3) = msg->axes[3]; // Aileron
 }
 
 Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh) {
@@ -22,8 +22,8 @@ Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh) {
     m_nh = std::make_shared<ros::NodeHandle>(nh);
 
     /** define dimensions first given solver object */
-    controls = DM::zeros(m_odeSolver->dim_u());
     state = DM::zeros(m_odeSolver->dim_x());
+    control_cmds = DM::zeros(m_odeSolver->dim_u());
 
     /** initialize subscribers and publishers */
     int broadcast_state;
@@ -34,6 +34,7 @@ Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh) {
 
     std::vector<double> initial_value;
     m_nh->getParam("init_state", initial_value);
+    /* Init values for Actuator positions */
     initial_value.emplace_back(0);
     initial_value.emplace_back(0);
     initial_value.emplace_back(0);
@@ -43,15 +44,18 @@ Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh) {
 
     //pose_pub  = m_nh->advertise<geometry_msgs::PoseStamped>("/sim/kite_pose", 100);
     state_pub = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/sim/kite_state", 1);
+    control_pub = m_nh->advertise<sensor_msgs::Joy>("/sim/kite_controls", 1);
     tether_pub = m_nh->advertise<geometry_msgs::Vector3Stamped>("/sim/tether_force", 1);
 
-    control_sub = m_nh->subscribe("/sim/set/kite_controls", 100, &Simulator::controlCallback, this);
+    controlcmd_sub = m_nh->subscribe("/sim/set/kite_controls", 100, &Simulator::controlCallback, this);
 
     msg_state.twist.resize(2);
     msg_state.transforms.resize(1);
     msg_state.wrench.resize(2);
 
     msg_state.header.frame_id = "kite_sim";
+
+    msg_control.axes.resize(4);
 }
 
 void Simulator::simulate() {
@@ -59,8 +63,8 @@ void Simulator::simulate() {
     double dt = p["tf"];
 
     /* Make sure thrust is not negative */
-    if (static_cast<double>(controls(0)) < 0.0)
-        controls(0) = 0.0;
+    if (static_cast<double>(control_cmds(0)) < 0.0)
+        control_cmds(0) = 0.0;
 
     /* Get pitot airspeed */
     DM airspeed_evaluated = m_NumericAirspeedMeas(DMVector{state})[0];
@@ -74,18 +78,19 @@ void Simulator::simulate() {
     beta = aeroValues_evaluated_vect[2];
 
     /* Get specific nongravitational force before solving (altering) the state */
-    DM specNongravForce_evaluated = m_NumericSpecNongravForce(DMVector{state, controls})[0];
+    DM specNongravForce_evaluated = m_NumericSpecNongravForce(DMVector{state, control_cmds})[0];
     std::vector<double> specNongravForce_evaluated_vect = specNongravForce_evaluated.nonzeros();
     specNongravForce = specNongravForce_evaluated_vect;
 
     if (sim_tether) {
         /* Get tether force vector */
-        DM specTethForce_evaluated = m_NumericSpecTethForce(DMVector{state, controls})[0];
+        DM specTethForce_evaluated = m_NumericSpecTethForce(DMVector{state, control_cmds})[0];
         std::vector<double> specTethForce_evaluated_vect = specTethForce_evaluated.nonzeros();
         specTethForce = specTethForce_evaluated_vect;
     }
 
-    state = m_odeSolver->solve(state, controls, dt);
+    std::cout << "sim: control commands: " << control_cmds << "\n";
+    state = m_odeSolver->solve(state, control_cmds, dt);
     //std::cout << "length : " << DM::norm_2(state(Slice(6,9))) << "\n";
     //std::cout << "State: " << state << "\n";
 }
@@ -130,6 +135,16 @@ void Simulator::publish_state(const ros::Time &sim_time) {
     msg_state.twist[1].angular.x = Va_pitot;
 
     state_pub.publish(msg_state);
+
+    /** Controls message **/
+    msg_control.header.stamp = sim_time;
+
+    msg_control.axes[0] = state_vec[13]; // Thrust
+    msg_control.axes[1] = state_vec[14]; // Elevator
+    msg_control.axes[2] = state_vec[15]; // Rudder
+    msg_control.axes[3] = state_vec[16]; // Aileron
+
+    control_pub.publish(msg_control);
 }
 
 void Simulator::publish_pose(const ros::Time &sim_time) {

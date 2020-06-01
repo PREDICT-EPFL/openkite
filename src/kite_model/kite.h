@@ -85,6 +85,11 @@ struct PlaneAerodynamics {
     double Cldr;
     double Cndr;
 };
+struct PlaneActuators {
+    double TC_dER;
+    double TC_dA;
+};
+
 struct TetherProperties {
     double length;
     double Ks;
@@ -99,6 +104,7 @@ struct KiteProperties {
     PlaneGeometry Geometry;
     PlaneInertia Inertia;
     PlaneAerodynamics Aerodynamics;
+    PlaneActuators Actuators;
     TetherProperties Tether;
 };
 
@@ -175,7 +181,7 @@ public:
                   GEN &b, GEN &c, GEN &AR, GEN &S,
                   GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
-                  GEN &e_oswald,
+                  DLO &e_oswald,
                   DLO &CD0,
 
 
@@ -216,6 +222,11 @@ public:
                   RUD &CYdr,
                   RUD &Cldr,
                   RUD &Cndr,
+
+
+                  ELV &TC_dE,
+                  RUD &TC_dR,
+                  AIL &TC_dA,
 
                   casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
                   casadi::SX &F_thr0, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,

@@ -41,12 +41,13 @@ private:
     casadi::Function m_NumericSpecNongravForce;
     casadi::Function m_NumericSpecTethForce;
 
-    ros::Subscriber control_sub;
+    ros::Subscriber controlcmd_sub;
     ros::Publisher  state_pub;
+    ros::Publisher  control_pub;
     ros::Publisher  tether_pub;
     ros::Publisher  pose_pub;
 
-    casadi::DM      controls;
+    casadi::DM      control_cmds;
     casadi::DM      state;
     double          Va_pitot{0};
     double          Va{0};
@@ -58,6 +59,7 @@ private:
     void controlCallback(const sensor_msgs::JoyConstPtr &msg);
     double sim_rate;
     sensor_msgs::MultiDOFJointState msg_state;
+    sensor_msgs::Joy                msg_control;
     geometry_msgs::Vector3Stamped msg_tether;
 
     bool initialized;
