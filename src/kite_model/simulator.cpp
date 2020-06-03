@@ -89,7 +89,6 @@ void Simulator::simulate() {
         specTethForce = specTethForce_evaluated_vect;
     }
 
-    std::cout << "sim: control commands: " << control_cmds << "\n";
     state = m_odeSolver->solve(state, control_cmds, dt);
     //std::cout << "length : " << DM::norm_2(state(Slice(6,9))) << "\n";
     //std::cout << "State: " << state << "\n";
