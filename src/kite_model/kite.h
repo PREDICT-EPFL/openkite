@@ -8,11 +8,11 @@
 #include "sys/stat.h"
 #include <fstream>
 
-struct WindProperties {
-    double WindFrom_deg{180.0};
+struct AtmosphereData {
+    double WindFrom{M_PI};
     double WindSpeed{0.0};
+    double airDensity{1.1589}; // Standard atmosphere at 468 meters
 };
-
 struct PlaneGeometry {
     //double imuPitchOffset_deg;
 
@@ -21,7 +21,6 @@ struct PlaneGeometry {
     double aspectRatio;
     double wingSurfaceArea;
 };
-
 struct PlaneInertia {
     double mass;
     double Ixx;
@@ -29,7 +28,6 @@ struct PlaneInertia {
     double Izz;
     double Ixz;
 };
-
 struct PlaneAerodynamics {
     double e_oswald;
 
@@ -87,6 +85,10 @@ struct PlaneAerodynamics {
     double Cldr;
     double Cndr;
 };
+struct PlaneActuators {
+    double TC_dER;
+    double TC_dA;
+};
 
 struct TetherProperties {
     double length;
@@ -96,13 +98,13 @@ struct TetherProperties {
     double ry;
     double rz;
 };
-
 struct KiteProperties {
     std::string name;
-    WindProperties Wind;
+    AtmosphereData atmosphere;
     PlaneGeometry Geometry;
     PlaneInertia Inertia;
     PlaneAerodynamics Aerodynamics;
+    PlaneActuators Actuators;
     TetherProperties Tether;
 };
 
@@ -111,45 +113,45 @@ struct AlgorithmProperties {
     double sampling_time;
 };
 
-
 namespace kite_utils {
-    /** load properties from a YAML file */
-    KiteProperties LoadProperties(const std::string &filename);
+/** load properties from a YAML file */
+KiteProperties LoadProperties(const std::string &filename);
 
-    KiteProperties LoadMinimalProperties(const std::string &filename);
+KiteProperties LoadMinimalProperties(const std::string &filename);
 
 
-    /** architecture-dependend time stamping */
-    typedef std::chrono::time_point<std::chrono::system_clock> time_point;
+/** architecture-dependend time stamping */
+typedef std::chrono::time_point<std::chrono::system_clock> time_point;
 
-    time_point get_time();
+time_point get_time();
 
-    /** write a DM vector to a file */
-    void write_to_file(const std::string &filename, const casadi::DM &data);
+/** write a DM vector to a file */
+void write_to_file(const std::string &filename, const casadi::DM &data);
 
-    /** read a vector from a file */
-    casadi::DM read_from_file(const std::string &filename);
+/** read a vector from a file */
+casadi::DM read_from_file(const std::string &filename);
 
-    /** check if file exists */
-    bool file_exists(const std::string &filename);
+/** check if file exists */
+bool file_exists(const std::string &filename);
 
-    enum IdentMode {
-        LONGITUDINAL,
-        LATERAL,
-        YAW,
-        COMPLETE
-    };
+enum IdentMode {
+    PITCH,
+    ROLL,
+    YAW,
+    COMPLETE,
+    YR,
+    YRb
+};
 }
 
 class KiteDynamics {
 public:
     //constructor
     KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
-                 const bool teth_ON = false, const bool controlsIncludeWind = false);
+                 const bool teth_ON = false);
 
     KiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
-                 const kite_utils::IdentMode &identMode,
-                 const bool controlsIncludeWind = false);
+                 const kite_utils::IdentMode &identMode);
 
     KiteDynamics() = default;
 
@@ -164,7 +166,8 @@ public:
     casadi::SX getSymbolicJacobian() { return this->SymJacobian; }
 
     casadi::Function getNumericDynamics() { return this->NumDynamics; }
-    casadi::Function getNumericAirspeed() { return this->NumAirspeed; }
+    casadi::Function getNumericAirspeedMeas() { return this->NumAirspeedMeasured; }
+    casadi::Function getNumericAeroValues() { return this->NumAeroValues; }
     casadi::Function getNumericSpecNongravForce() { return this->NumSpecNongravForce; }
     casadi::Function getNumericSpecTethForce() { return this->NumSpecTethForce; }
     casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
@@ -174,11 +177,11 @@ public:
     /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
     template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
     void getModel(GEN &g, GEN &rho,
-                  W &windFrom_deg, W &windSpeed,
+                  W &windFrom, W &windSpeed,
                   GEN &b, GEN &c, GEN &AR, GEN &S,
                   GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
 
-                  GEN &e_oswald,
+                  DLO &e_oswald,
                   DLO &CD0,
 
 
@@ -194,7 +197,7 @@ public:
                   GEN &Cl0,
                   DLA &Clb,
 
-                  DLA &Cn0,
+                  GEN &Cn0,
                   DLA &Cnb,
 
 
@@ -220,10 +223,18 @@ public:
                   RUD &Cldr,
                   RUD &Cndr,
 
+
+                  ELV &TC_dE,
+                  RUD &TC_dR,
+                  AIL &TC_dA,
+
                   casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
-                  casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
+                  casadi::SX &F_thr0, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
+                  casadi::SX &F_thr0_cmd, casadi::SX &dE_cmd, casadi::SX &dR_cmd, casadi::SX &dA_cmd,
                   casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                  casadi::SX &Va, casadi::SX &Faero_b, casadi::SX &T_b, bool teth_ON, casadi::SX &b_Ftether);
+                  casadi::SX &F_thr0_dot, casadi::SX &dE_dot, casadi::SX &dR_dot, casadi::SX &dA_dot,
+                  casadi::SX &Va_pitot, casadi::SX &Va, casadi::SX &alpha, casadi::SX &beta,
+                  casadi::SX &b_F_aero, casadi::SX &b_F_thrust, bool teth_ON, casadi::SX &b_F_tether);
 
 private:
     //state variables
@@ -242,7 +253,9 @@ private:
     //numerical dynamics evaluation
     casadi::Function NumDynamics;
     //numerical airspeed evaluation
-    casadi::Function NumAirspeed;
+    casadi::Function NumAirspeedMeasured;
+    //numerical aero values
+    casadi::Function NumAeroValues;
     //numerical specific nongravitational force evaluation
     casadi::Function NumSpecNongravForce;
     //numerical tether force evaluation
@@ -254,125 +267,6 @@ private:
 
     casadi::Function AeroDynamics;
 };
-
-class MinimalKiteDynamics {
-public:
-
-    //constructor
-    MinimalKiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
-                        const bool controlsIncludeWind = false);
-
-    MinimalKiteDynamics(const KiteProperties &KiteProps, const AlgorithmProperties &AlgoProps,
-                        const kite_utils::IdentMode &identMode,
-                        const bool controlsIncludeWind = false);
-
-    MinimalKiteDynamics() = default;
-
-    virtual ~MinimalKiteDynamics() {}
-
-    /** public methods */
-    casadi::SX getSymbolicState() { return this->State; }
-
-    casadi::SX getSymbolicControl() { return this->Control; }
-
-    casadi::SX getSymbolicParameters() { return this->Parameters; }
-
-    casadi::SX getSymbolicDynamics() { return this->SymDynamics; }
-
-    casadi::SX getSymbolicIntegrator() { return this->SymIntegartor; }
-
-    casadi::SX getSymbolicJacobian() { return this->SymJacobian; }
-
-    casadi::Function getNumericDynamics() { return this->NumDynamics; }
-
-    casadi::Function getNumericNumSpecNongravForce() { return this->NumSpecNongravForce; }
-
-    casadi::Function getNumericIntegrator() { return this->NumIntegrator; }
-
-    casadi::Function getNumericJacobian() { return this->NumJacobian; }
-
-    casadi::Function getAeroDynamicForces() { return this->AeroDynamics; }
-
-    /* Wind, GENeral, Dynamic LOngitudinal, Dynamic LAteral, AILeron, ELeVator, RUDder*/
-    template<typename W, typename GEN, typename DLO, typename DLA, typename AIL, typename ELV, typename RUD>
-    void getMinimalModel(GEN &g, GEN &rho,
-                         W &windFrom_deg, W &windSpeed,
-                         GEN &b, GEN &c, GEN &AR, GEN &S,
-                         GEN &Mass, GEN &Ixx, GEN &Iyy, GEN &Izz, GEN &Ixz,
-
-                         DLO &e_oswald,
-                         DLO &CD0,
-
-
-                         DLO &CL0,
-                         DLO &CLa,
-
-                         DLO &Cm0,
-                         DLO &Cma,
-
-
-                         DLA &CYb,
-
-            //GEN &Cl0,
-                         DLA &Clb,
-
-            //GEN &Cn0,
-                         DLA &Cnb,
-
-
-            //DLO &CLq,
-            //DLO &Cmq,
-
-            //GEN &CYp,
-                         DLA &Clp,
-            //DLA &Cnp,
-
-            //DLA &CYr,
-            //DLA &Clr,
-                         DLA &Cnr,
-
-
-            //ELV &CLde,
-                         ELV &Cmde,
-
-                         AIL &Clda,
-            //GEN &Cnda,
-
-            //RUD &CYdr,
-            //RUD &Cldr,
-                         RUD &Cndr,
-
-                         casadi::SX &v, casadi::SX &w, casadi::SX &r, casadi::SX &q,
-                         casadi::SX &T, casadi::SX &dE, casadi::SX &dR, casadi::SX &dA,
-                         casadi::SX &v_dot, casadi::SX &w_dot, casadi::SX &r_dot, casadi::SX &q_dot,
-                         casadi::SX &Faero_b, casadi::SX &T_b);
-
-private:
-    //state variables
-    casadi::SX State;
-    //control variables
-    casadi::SX Control;
-    //parameters
-    casadi::SX Parameters;
-    //symbolic equations of motion
-    casadi::SX SymDynamics;
-    //symbolic equations of integartor
-    casadi::SX SymIntegartor;
-    //symbolic expression for system jacobian
-    casadi::SX SymJacobian;
-
-    //numerical dynamics evaluation
-    casadi::Function NumDynamics;
-    //numerical specific nongravitational force evaluation
-    casadi::Function NumSpecNongravForce;
-    //numerical integral evaluation
-    casadi::Function NumIntegrator;
-    //numerical jacobian evaluation
-    casadi::Function NumJacobian;
-
-    casadi::Function AeroDynamics;
-};
-
 
 /** 6-DoF Kinematics of a Rigid Body */
 class RigidBodyKinematics {

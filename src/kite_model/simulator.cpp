@@ -10,22 +10,20 @@ using namespace casadi;
 //    controls(3) = msg->ailerons;
 //}
 
-void Simulator::controlCallback(const sensor_msgs::JoyConstPtr &msg)
-{
-    controls(0) = msg->axes[0]; // Thrust
-    controls(1) = msg->axes[1]; // Elevator
-    controls(2) = msg->axes[2]; // Rudder
-    controls(3) = msg->axes[3]; // Aileron
+void Simulator::controlCallback(const sensor_msgs::JoyConstPtr &msg) {
+    control_cmds(0) = msg->axes[0]; // Thrust
+    control_cmds(1) = msg->axes[1]; // Elevator
+    control_cmds(2) = msg->axes[2]; // Rudder
+    control_cmds(3) = msg->axes[3]; // Aileron
 }
 
-Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh)
-{
+Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh) {
     m_odeSolver = std::make_shared<ODESolver>(odeSolver);
-    m_nh        = std::make_shared<ros::NodeHandle>(nh);
+    m_nh = std::make_shared<ros::NodeHandle>(nh);
 
     /** define dimensions first given solver object */
-    controls = DM::zeros(m_odeSolver->dim_u());
-    state    = DM::zeros(m_odeSolver->dim_x());
+    state = DM::zeros(m_odeSolver->dim_x());
+    control_cmds = DM::zeros(m_odeSolver->dim_u());
 
     /** initialize subscribers and publishers */
     int broadcast_state;
@@ -36,58 +34,71 @@ Simulator::Simulator(const ODESolver &odeSolver, const ros::NodeHandle &nh)
 
     std::vector<double> initial_value;
     m_nh->getParam("init_state", initial_value);
+    /* Init values for Actuator positions */
+    initial_value.emplace_back(0);
+    initial_value.emplace_back(0);
+    initial_value.emplace_back(0);
+    initial_value.emplace_back(0);
     initialize(DM(initial_value));
     ROS_INFO_STREAM("Simulator initialized at: " << initial_value);
 
     //pose_pub  = m_nh->advertise<geometry_msgs::PoseStamped>("/sim/kite_pose", 100);
-    state_pub   = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/sim/kite_state", 1);
-    tether_pub   = m_nh->advertise<geometry_msgs::Vector3Stamped>("/sim/tether_force", 1);
+    state_pub = m_nh->advertise<sensor_msgs::MultiDOFJointState>("/sim/kite_state", 1);
+    control_pub = m_nh->advertise<sensor_msgs::Joy>("/sim/kite_controls", 1);
+    tether_pub = m_nh->advertise<geometry_msgs::Vector3Stamped>("/sim/tether_force", 1);
 
-    control_sub = m_nh->subscribe("/sim/set/kite_controls", 100, &Simulator::controlCallback, this);
+    controlcmd_sub = m_nh->subscribe("/sim/set/kite_controls", 100, &Simulator::controlCallback, this);
 
-    msg_state.twist.resize(1);
+    msg_state.twist.resize(2);
     msg_state.transforms.resize(1);
-    msg_state.wrench.resize(1);
+    msg_state.wrench.resize(2);
 
     msg_state.header.frame_id = "kite_sim";
+
+    msg_control.axes.resize(4);
 }
 
-void Simulator::simulate()
-{
+void Simulator::simulate() {
     Dict p = m_odeSolver->getParams();
     double dt = p["tf"];
 
     /* Make sure thrust is not negative */
-    if (static_cast<double>(controls(0)) < 0.0)
-        controls(0) = 0.0;
+    if (static_cast<double>(control_cmds(0)) < 0.0)
+        control_cmds(0) = 0.0;
 
-    /* Get airspeed */
-    DM airspeed_evaluated = m_NumericAirspeed(DMVector{state, controls})[0];
-    airspeed = airspeed_evaluated.nonzeros()[0];
+    /* Get pitot airspeed */
+    DM airspeed_evaluated = m_NumericAirspeedMeas(DMVector{state})[0];
+    Va_pitot = airspeed_evaluated.nonzeros()[0];
+
+    /* Get aero values (Va, alpha, beta) */
+    DM aeroValues_evaluated = m_NumericAeroValues(DMVector{state})[0];
+    std::vector<double> aeroValues_evaluated_vect = aeroValues_evaluated.nonzeros();
+    Va = aeroValues_evaluated_vect[0];
+    alpha = aeroValues_evaluated_vect[1];
+    beta = aeroValues_evaluated_vect[2];
 
     /* Get specific nongravitational force before solving (altering) the state */
-    DM specNongravForce_evaluated = m_NumericSpecNongravForce(DMVector{state, controls})[0];
+    DM specNongravForce_evaluated = m_NumericSpecNongravForce(DMVector{state, control_cmds})[0];
     std::vector<double> specNongravForce_evaluated_vect = specNongravForce_evaluated.nonzeros();
     specNongravForce = specNongravForce_evaluated_vect;
 
     if (sim_tether) {
         /* Get tether force vector */
-        DM specTethForce_evaluated = m_NumericSpecTethForce(DMVector{state, controls})[0];
+        DM specTethForce_evaluated = m_NumericSpecTethForce(DMVector{state, control_cmds})[0];
         std::vector<double> specTethForce_evaluated_vect = specTethForce_evaluated.nonzeros();
         specTethForce = specTethForce_evaluated_vect;
     }
 
-    state = m_odeSolver->solve(state, controls, dt);
+    state = m_odeSolver->solve(state, control_cmds, dt);
     //std::cout << "length : " << DM::norm_2(state(Slice(6,9))) << "\n";
     //std::cout << "State: " << state << "\n";
 }
 
-void Simulator::publish_state()
-{
+void Simulator::publish_state(const ros::Time &sim_time) {
     /** State message */
     std::vector<double> state_vec = state.nonzeros();
 
-    msg_state.header.stamp = ros::Time::now();
+    msg_state.header.stamp = sim_time;
 
     msg_state.twist[0].linear.x = state_vec[0];
     msg_state.twist[0].linear.y = state_vec[1];
@@ -106,24 +117,41 @@ void Simulator::publish_state()
     msg_state.transforms[0].rotation.y = state_vec[11];
     msg_state.transforms[0].rotation.z = state_vec[12];
 
-    /* Using wrench/force as for acceleration */
+    /* Using wrench 0 as for acceleration, as measured by IMU (spec nongravitational forces) */
     msg_state.wrench[0].force.x = specNongravForce[0];
     msg_state.wrench[0].force.y = specNongravForce[1];
     msg_state.wrench[0].force.z = specNongravForce[2];
 
-    /* Using wrench/torque for airspeed */
-    msg_state.wrench[0].torque.x = airspeed;
+    /* Using wrench 1 as for acceleration */
+    msg_state.wrench[1].force.x = specTethForce[0];
+    msg_state.wrench[1].force.y = specTethForce[1];
+    msg_state.wrench[1].force.z = specTethForce[2];
+
+    /* Aero values */
+    msg_state.twist[1].linear.x = Va;
+    msg_state.twist[1].linear.y = beta;
+    msg_state.twist[1].linear.z = alpha;
+    msg_state.twist[1].angular.x = Va_pitot;
 
     state_pub.publish(msg_state);
+
+    /** Controls message **/
+    msg_control.header.stamp = sim_time;
+
+    msg_control.axes[0] = state_vec[13]; // Thrust
+    msg_control.axes[1] = state_vec[14]; // Elevator
+    msg_control.axes[2] = state_vec[15]; // Rudder
+    msg_control.axes[3] = state_vec[16]; // Aileron
+
+    control_pub.publish(msg_control);
 }
 
-void Simulator::publish_pose()
-{
+void Simulator::publish_pose(const ros::Time &sim_time) {
     DM pose = getPose();
     std::vector<double> pose_vec = pose.nonzeros();
 
     geometry_msgs::PoseStamped msg_pose;
-    msg_pose.header.stamp = ros::Time::now();
+    msg_pose.header.stamp = sim_time;
 
     msg_pose.pose.position.x = pose_vec[0];
     msg_pose.pose.position.y = pose_vec[1];
@@ -137,20 +165,7 @@ void Simulator::publish_pose()
     pose_pub.publish(msg_pose);
 }
 
-void Simulator::publish_tether_force() {
-
-    msg_state.header.stamp = ros::Time::now();
-
-    msg_tether.vector.x = specTethForce[0];
-    msg_tether.vector.y = specTethForce[1];
-    msg_tether.vector.z = specTethForce[2];
-
-    tether_pub.publish(msg_tether);
-}
-
-
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     ros::init(argc, argv, "simulator");
     ros::NodeHandle n("~");
 
@@ -159,10 +174,14 @@ int main(int argc, char **argv)
     n.param<std::string>("kiteparams_path", kite_params_file, "_kiteparams_.yaml");
     std::cout << "Simulator: Using kite parameters from: " << kite_params_file << "\n";
     KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
-    n.param<double>("windFrom_deg", kite_props.Wind.WindFrom_deg, 180.0);
-    n.param<double>("windSpeed", kite_props.Wind.WindSpeed, 0.0);
 
-    std::cout << "Simulator: Wind from " << kite_props.Wind.WindFrom_deg << " deg at " << kite_props.Wind.WindSpeed << " m/s.\n";
+    double windFrom_deg{180};
+    n.param<double>("windFrom_deg", windFrom_deg, 180.0);
+    kite_props.atmosphere.WindFrom = windFrom_deg * M_PI / 180.0;
+    n.param<double>("windSpeed", kite_props.atmosphere.WindSpeed, 0.0);
+    kite_props.atmosphere.airDensity = 1.1589; // Standard atmosphere at 468 meters
+
+    std::cout << "Simulator: Wind from " << windFrom_deg << " deg at " << kite_props.atmosphere.WindSpeed << " m/s.\n";
 
     bool simulate_tether;
     n.param<bool>("simulate_tether", simulate_tether, false);
@@ -172,7 +191,8 @@ int main(int argc, char **argv)
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
-    KiteDynamics kite = KiteDynamics(kite_props, algo_props, simulate_tether, false);
+    KiteDynamics kite = KiteDynamics(kite_props, algo_props, simulate_tether);
+//    MinimalKiteDynamics kite = MinimalKiteDynamics(kite_props, algo_props);
 
     int broadcast_state;
     n.param<int>("broadcast_state", broadcast_state, 1);
@@ -185,10 +205,12 @@ int main(int argc, char **argv)
     n.param<double>("simulation_speed", sim_speed, 1.0);
 
     /** cast to seconds and round to ms */
-    double dt = (1.0/node_rate);
+    double dt = (1.0 / node_rate);
     dt = std::roundf(sim_speed * dt * 1000) / 1000;
 
-    Dict params({{"tf", dt}, {"tol", 1e-6}, {"method", CVODES}});
+    Dict params({{"tf",     dt},
+                 {"tol",    1e-6},
+                 {"method", CVODES}});
     Function ode = kite.getNumericDynamics();
     auto dynamics = kite.getAeroDynamicForces();
 
@@ -196,25 +218,26 @@ int main(int argc, char **argv)
 
     Simulator simulator(odeSolver, n);
     simulator.sim_tether = simulate_tether;
-    simulator.setNumericAirspeed(kite.getNumericAirspeed());
+    simulator.setNumericAirspeedMeas(kite.getNumericAirspeedMeas());
+    simulator.setNumericAeroValues(kite.getNumericAeroValues());
     simulator.setNumericSpecNongravForce(kite.getNumericSpecNongravForce());
     simulator.setNumericSpecTethForce(kite.getNumericSpecTethForce());
 
-    ros::Rate loop_rate(node_rate); /** 50 Hz */
+    ros::Rate loop_rate(node_rate);
 
-    while (ros::ok())
-    {
-        if(simulator.is_initialized())
-        {
+    while (ros::ok()) {
+        if (simulator.is_initialized()) {
             simulator.simulate();
-            if(broadcast_state)
-                simulator.publish_state();
-            else
-                simulator.publish_pose();
 
-            if (simulator.sim_tether) {
-                simulator.publish_tether_force();
-            }
+//            double sim_time_sec = (ros::Time::now() - simulation_time_start).toSec() * sim_speed;
+            ros::Time sim_time;
+//            sim_time.fromSec(sim_time_sec);
+            sim_time = ros::Time::now();
+
+            if (broadcast_state)
+                simulator.publish_state(sim_time);
+            else
+                simulator.publish_pose(sim_time);
 
             if (-simulator.getState().nonzeros()[8] < 0) {
                 std::cout << "\n----------------------------------\n"
