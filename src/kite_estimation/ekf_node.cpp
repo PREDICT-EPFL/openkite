@@ -56,7 +56,7 @@ KiteEKF_Node::KiteEKF_Node(const ros::NodeHandle &_nh, const Function &Integrato
     state_pub = nh->advertise<sensor_msgs::MultiDOFJointState>("/kite_state", 100);
 
     /** @todo : parametrize topics */
-    std::string pose_topic = "/optitrack/Kite/pose";
+    std::string pose_topic = "/optitrack_client/Kite/pose";
     std::string control_topic = "/chatter";
 
     pose_sub = nh->subscribe(pose_topic, 1000, &KiteEKF_Node::filterCallback, this);
@@ -134,13 +134,13 @@ void KiteEKF_Node::initialize()
 DM KiteEKF_Node::convertToDM(const geometry_msgs::PoseStamped &_value)
 {
     DM value = DM::zeros(7);
-    value[0] = _value.pose.position.x;
-    value[1] = _value.pose.position.y;
-    value[2] = _value.pose.position.z;
-    value[3] = _value.pose.orientation.w;
-    value[4] = _value.pose.orientation.x;
-    value[5] = _value.pose.orientation.y;
-    value[6] = _value.pose.orientation.z;
+    value(0) = _value.pose.position.x;
+    value(1) = _value.pose.position.y;
+    value(2) = _value.pose.position.z;
+    value(3) = _value.pose.orientation.w;
+    value(4) = _value.pose.orientation.x;
+    value(5) = _value.pose.orientation.y;
+    value(6) = _value.pose.orientation.z;
 
     return value;
 }
@@ -224,12 +224,12 @@ int main(int argc, char **argv)
     /** create a kite object */
     std::string kite_params_file;
     n.param<std::string>("kite_params", kite_params_file, "./umx_radian.yaml");
-    std::cout << kite_params_file << "\n";
-    KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
+    //std::cout << kite_params_file << "\n";
+    //KiteProperties kite_props = kite_utils::LoadProperties(kite_params_file);
     AlgorithmProperties algo_props;
     algo_props.Integrator = RK4;
     algo_props.sampling_time = 0.02;
-    KiteDynamics kite = KiteDynamics(kite_props, algo_props);
+    //KiteDynamics kite = KiteDynamics(kite_props, algo_props);
 
     /** create a rigid body topic */
     RigidBodyKinematics rigid_body = RigidBodyKinematics(algo_props);

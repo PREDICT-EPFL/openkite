@@ -162,7 +162,7 @@ namespace vrpn_client_ros
     std::string server;
     int port;
 
-    host_nh.param<std::string>("server", server, "localhost");
+    host_nh.param<std::string>("server", server, "192.168.0.249");
     host_nh.param<int>("port", port, DEFAULT_OPTITRACK_PORT);
     host_stream << "tcp://" << server << ":" << port;
 
